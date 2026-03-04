@@ -46,7 +46,7 @@ function EmailCaptureModal({ onClose, results, mode, source = 'analyzer' }) {
     setStatus("loading");
     try {
       // Post to Beehiiv via their public subscribe endpoint
-      const res = await fetch("https://www.news-thelegacybridge.com/api/v1/subscribe", {
+      await fetch("https://www.news-thelegacybridge.com/api/v1/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
