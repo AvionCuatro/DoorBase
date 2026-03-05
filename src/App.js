@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 
 const C = {
   white: "#ffffff",
@@ -31,6 +31,119 @@ const DEFAULT_STANDARDS = {
   hold: { greenCashFlow: 200, greenCapRate: 6, yellowCashFlow: 0, yellowCapRate: 4 },
   flip: { greenProfit: 25000, greenROI: 15, yellowProfit: 10000, yellowROI: 8 },
 };
+
+// ─── PRO ACCESS HOOK ─────────────────────────────────────────────────────────
+// Development-only toggle. Swap internals for real auth + Stripe when ready.
+function useProAccess() {
+  const [isPro, setIsPro] = useState(() => {
+    try { return localStorage.getItem("doorbase_pro") === "true"; }
+    catch { return false; }
+  });
+  const togglePro = useCallback(() => {
+    setIsPro(prev => {
+      const next = !prev;
+      try { localStorage.setItem("doorbase_pro", String(next)); } catch {}
+      return next;
+    });
+  }, []);
+  return { isPro, togglePro };
+}
+
+// ─── PRO GATE ────────────────────────────────────────────────────────────────
+// Wrap any pro-only UI. Shows locked state when isPro is false.
+function ProGate({ isPro, children, title, description, onUpgrade }) {
+  if (isPro) return children;
+  return (
+    <div style={{
+      background: C.bg, border: `1.5px dashed ${C.border}`, borderRadius: 14,
+      padding: "40px 24px", textAlign: "center",
+    }}>
+      <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 6 }}>
+        {title || "Pro Feature"}
+      </div>
+      <div style={{ fontSize: 14, color: C.muted, lineHeight: 1.6, marginBottom: 20, maxWidth: 400, margin: "0 auto 20px" }}>
+        {description || "This tool is available with DoorBase Pro."}
+      </div>
+      <button onClick={onUpgrade} style={{
+        background: C.green, border: "none", borderRadius: 10,
+        padding: "12px 28px", color: C.white, fontSize: 14, fontWeight: 700,
+        cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+        boxShadow: "0 2px 8px rgba(22,163,74,0.3)",
+      }}>Join the Founding 50</button>
+    </div>
+  );
+}
+
+// ─── DEV PRO TOGGLE ──────────────────────────────────────────────────────────
+function DevProToggle({ isPro, onToggle }) {
+  if (process.env.NODE_ENV !== "development") return null;
+  return (
+    <button onClick={onToggle} style={{
+      position: "fixed", bottom: 16, right: 16, zIndex: 9999,
+      background: isPro ? C.green : "#6B7280", color: C.white,
+      border: "none", borderRadius: 8, padding: "8px 14px",
+      fontSize: 12, fontWeight: 700, cursor: "pointer",
+      fontFamily: "'DM Sans', sans-serif",
+      boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
+    }}>
+      {isPro ? "PRO ON" : "PRO OFF"} (dev)
+    </button>
+  );
+}
+
+// ─── DEAL PIPELINE (Pro stub) ────────────────────────────────────────────────
+function DealPipeline() {
+  const [deals] = useState([
+    { id: 1, address: "123 Oak St", type: "hold", verdict: "green", cashFlow: 312, date: "2026-03-01" },
+    { id: 2, address: "456 Elm Ave", type: "flip", verdict: "yellow", cashFlow: null, profit: 18500, date: "2026-02-28" },
+    { id: 3, address: "789 Pine Rd", type: "hold", verdict: "red", cashFlow: -87, date: "2026-02-25" },
+  ]);
+  const verdictStyle = (v) => ({
+    green: { bg: C.greenLight, color: C.greenDark, label: "DEAL WORKS" },
+    yellow: { bg: C.yellowLight, color: C.yellowDark, label: "MARGINAL" },
+    red: { bg: C.redLight, color: C.red, label: "PASS" },
+  }[v]);
+  return (
+    <div>
+      <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Deal Pipeline</div>
+      <div style={{ fontSize: 14, color: C.muted, marginBottom: 20 }}>Every deal you analyze, saved and compared.</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {deals.map(d => {
+          const vs = verdictStyle(d.verdict);
+          return (
+            <div key={d.id} style={{
+              background: C.white, border: `1px solid ${C.border}`, borderRadius: 10,
+              padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{d.address}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+                  {d.type === "hold" ? "Buy & Hold" : "Fix & Flip"} · {d.date}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+                  {d.type === "hold" ? fmtD(d.cashFlow) + "/mo" : fmtD(d.profit)}
+                </div>
+                <div style={{
+                  background: vs.bg, color: vs.color, fontSize: 11, fontWeight: 700,
+                  padding: "4px 10px", borderRadius: 6, letterSpacing: "0.04em",
+                }}>{vs.label}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{
+        marginTop: 16, padding: "12px", border: `1.5px dashed ${C.border}`, borderRadius: 10,
+        textAlign: "center", color: C.muted, fontSize: 13, cursor: "pointer",
+      }}>
+        + Analyze a deal to add it here
+      </div>
+    </div>
+  );
+}
 
 // ─── FOUNDING 50 COUNTER ──────────────────────────────────────────────────────
 const FOUNDING_SPOTS = 50;
@@ -153,6 +266,7 @@ function ProTrigger({ text, onScrollToPro }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
+      onMouseDown={e => e.preventDefault()}
       onClick={onScrollToPro}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -334,14 +448,252 @@ function SettingsPanel({ standards, onSave, onClose }) {
   );
 }
 
+// ─── UNDERWRITING WORKSHEET ──────────────────────────────────────────────────
+function UnderwritingWorksheet({ onClose, onUsePrice }) {
+  const emptyComp = () => ({ address: "", salePrice: "", sqft: "", beds: "", baths: "", adjCondition: "0", adjLocation: "0", adjSize: "0" });
+  const [comps, setComps] = useState([emptyComp(), emptyComp(), emptyComp()]);
+  const [subject, setSubject] = useState({ address: "", sqft: "", beds: "", baths: "" });
+  const [offerPercent, setOfferPercent] = useState("95");
+
+  const updateComp = (i, key) => (val) => {
+    setComps(prev => prev.map((c, j) => j === i ? { ...c, [key]: val } : c));
+  };
+
+  const validComps = comps.filter(c => num(c.salePrice) > 0);
+
+  // Adjusted price per comp = sale price + all adjustments
+  const adjustedComps = validComps.map(c => {
+    const adj = num(c.adjCondition) + num(c.adjLocation) + num(c.adjSize);
+    return { ...c, adjustedPrice: num(c.salePrice) + adj };
+  });
+
+  // Price per sqft for each comp (if sqft provided)
+  const compsWithPsf = adjustedComps.map(c => ({
+    ...c,
+    pricePerSqft: num(c.sqft) > 0 ? c.adjustedPrice / num(c.sqft) : null,
+  }));
+
+  // Estimated value: average of adjusted prices, or if subject sqft is known, use avg $/sqft
+  const subjectSqft = num(subject.sqft);
+  const psfComps = compsWithPsf.filter(c => c.pricePerSqft !== null);
+
+  let estimatedValue = 0;
+  let method = "";
+  if (psfComps.length > 0 && subjectSqft > 0) {
+    const avgPsf = psfComps.reduce((s, c) => s + c.pricePerSqft, 0) / psfComps.length;
+    estimatedValue = avgPsf * subjectSqft;
+    method = "$/sqft";
+  } else if (adjustedComps.length > 0) {
+    estimatedValue = adjustedComps.reduce((s, c) => s + c.adjustedPrice, 0) / adjustedComps.length;
+    method = "avg adjusted";
+  }
+
+  const suggestedOffer = estimatedValue * (num(offerPercent) / 100);
+  const hasResult = estimatedValue > 0;
+
+  const inputStyle = (small) => ({
+    width: "100%", padding: small ? "8px 10px" : "10px 12px",
+    background: C.inputBg, border: `1.5px solid ${C.border}`,
+    borderRadius: 8, fontSize: 13, color: C.text,
+    fontFamily: "'DM Sans', sans-serif", outline: "none",
+    boxSizing: "border-box",
+  });
+
+  const labelStyle = { display: "block", fontSize: 11, fontWeight: 600, color: C.muted, marginBottom: 4 };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{
+        background: C.white, borderRadius: 16, width: "100%", maxWidth: 680,
+        padding: "28px", maxHeight: "92vh", overflowY: "auto",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+          <div>
+            <div style={{ display: "inline-block", background: C.greenLight, borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: C.greenDark, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>Pro Tool</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Deal Underwriting Worksheet</div>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>Build confidence in your purchase price using comparable sales.</div>
+          </div>
+          <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}>✕</button>
+        </div>
+
+        <div style={{ height: 1, background: C.border, marginBottom: 20 }} />
+
+        {/* Subject property */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Subject Property</div>
+        <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 20 }}>
+          <div style={{ marginBottom: 8 }}>
+            <label style={labelStyle}>Address (optional)</label>
+            <input value={subject.address} onChange={e => setSubject(p => ({ ...p, address: e.target.value }))} placeholder="123 Main St" style={inputStyle()} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <div>
+              <label style={labelStyle}>Sqft</label>
+              <input type="number" value={subject.sqft} onChange={e => setSubject(p => ({ ...p, sqft: e.target.value }))} placeholder="0" style={inputStyle(true)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Beds</label>
+              <input type="number" value={subject.beds} onChange={e => setSubject(p => ({ ...p, beds: e.target.value }))} placeholder="0" style={inputStyle(true)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Baths</label>
+              <input type="number" value={subject.baths} onChange={e => setSubject(p => ({ ...p, baths: e.target.value }))} placeholder="0" style={inputStyle(true)} />
+            </div>
+          </div>
+        </div>
+
+        {/* Comps */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Comparable Sales</div>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.5 }}>
+          Enter 2–3 recent sales of similar properties nearby. Adjustments add or subtract from the comp's sale price to account for differences vs. your subject.
+        </div>
+
+        {comps.map((comp, i) => (
+          <div key={i} style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Comp {i + 1}</div>
+              {comps.length > 2 && (
+                <button onClick={() => setComps(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", fontSize: 12, color: C.muted, cursor: "pointer" }}>Remove</button>
+              )}
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <label style={labelStyle}>Address</label>
+              <input value={comp.address} onChange={e => updateComp(i, "address")(e.target.value)} placeholder="456 Oak Ave" style={inputStyle(true)} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <div>
+                <label style={labelStyle}>Sale Price</label>
+                <input type="number" value={comp.salePrice} onChange={e => updateComp(i, "salePrice")(e.target.value)} placeholder="0" style={inputStyle(true)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Sqft</label>
+                <input type="number" value={comp.sqft} onChange={e => updateComp(i, "sqft")(e.target.value)} placeholder="0" style={inputStyle(true)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Beds</label>
+                <input type="number" value={comp.beds} onChange={e => updateComp(i, "beds")(e.target.value)} placeholder="0" style={inputStyle(true)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Baths</label>
+                <input type="number" value={comp.baths} onChange={e => updateComp(i, "baths")(e.target.value)} placeholder="0" style={inputStyle(true)} />
+              </div>
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, marginBottom: 6 }}>Adjustments vs. Subject (+ if comp is inferior, − if superior)</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              <div>
+                <label style={labelStyle}>Condition $</label>
+                <input type="number" value={comp.adjCondition} onChange={e => updateComp(i, "adjCondition")(e.target.value)} style={inputStyle(true)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Location $</label>
+                <input type="number" value={comp.adjLocation} onChange={e => updateComp(i, "adjLocation")(e.target.value)} style={inputStyle(true)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Size $</label>
+                <input type="number" value={comp.adjSize} onChange={e => updateComp(i, "adjSize")(e.target.value)} style={inputStyle(true)} />
+              </div>
+            </div>
+            {num(comp.salePrice) > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: C.greenDark, fontWeight: 600 }}>
+                Adjusted: {fmtD(num(comp.salePrice) + num(comp.adjCondition) + num(comp.adjLocation) + num(comp.adjSize))}
+                {num(comp.sqft) > 0 && <span style={{ color: C.muted, fontWeight: 400 }}> · {fmtD((num(comp.salePrice) + num(comp.adjCondition) + num(comp.adjLocation) + num(comp.adjSize)) / num(comp.sqft))}/sqft</span>}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {comps.length < 5 && (
+          <button onClick={() => setComps(prev => [...prev, emptyComp()])} style={{
+            width: "100%", padding: "10px", border: `1.5px dashed ${C.border}`, borderRadius: 10,
+            background: "transparent", color: C.muted, fontSize: 13, fontWeight: 600,
+            cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginBottom: 20,
+          }}>+ Add Another Comp</button>
+        )}
+
+        {/* Results */}
+        {hasResult && (
+          <>
+            <div style={{ height: 1, background: C.border, marginBottom: 20 }} />
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Valuation Summary</div>
+
+            <div style={{ background: C.greenLight, border: "1px solid #86efac", borderRadius: 12, padding: "18px 16px", marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.greenDark, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Estimated Value ({method})</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: C.greenDark }}>{fmtD(estimatedValue)}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.greenDark, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Based On</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.greenDark }}>{validComps.length} comp{validComps.length !== 1 ? "s" : ""}</div>
+                </div>
+              </div>
+              {psfComps.length > 0 && subjectSqft > 0 && (
+                <div style={{ fontSize: 12, color: C.greenDark, lineHeight: 1.5 }}>
+                  Avg adjusted $/sqft: <strong>{fmtD(psfComps.reduce((s, c) => s + c.pricePerSqft, 0) / psfComps.length)}</strong> x {fmt(subjectSqft)} sqft
+                </div>
+              )}
+            </div>
+
+            {/* Comp breakdown table */}
+            <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 16 }}>
+              {adjustedComps.map((c, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < adjustedComps.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                  <span style={{ fontSize: 13, color: C.muted }}>{c.address || `Comp ${i + 1}`}</span>
+                  <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: C.muted }}>{fmtD(num(c.salePrice))}</span>
+                    <span style={{ fontSize: 12, color: C.green }}>→</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{fmtD(c.adjustedPrice)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Offer strategy */}
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Offer Strategy</div>
+            <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "end" }}>
+                <div>
+                  <label style={labelStyle}>Offer % of Estimated Value</label>
+                  <input type="number" value={offerPercent} onChange={e => setOfferPercent(e.target.value)} style={inputStyle(true)} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, marginBottom: 4 }}>Suggested Offer</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{fmtD(suggestedOffer)}</div>
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+                At {offerPercent}%, you're {num(offerPercent) < 100 ? fmtD(estimatedValue - suggestedOffer) + " below" : num(offerPercent) > 100 ? fmtD(suggestedOffer - estimatedValue) + " above" : "at"} estimated value. {num(offerPercent) <= 95 ? "Room for negotiation built in." : num(offerPercent) <= 100 ? "Tight margin — make sure your other numbers are solid." : "Careful — you're above estimated value."}
+              </div>
+            </div>
+
+            <button onClick={() => { onUsePrice(Math.round(suggestedOffer).toString()); onClose(); }} style={{
+              width: "100%", padding: "14px", background: C.green, border: "none", borderRadius: 10,
+              color: C.white, fontSize: 15, fontWeight: 700, cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)",
+            }}>Use {fmtD(suggestedOffer)} as Purchase Price</button>
+          </>
+        )}
+
+        {!hasResult && (
+          <div style={{ background: C.bg, borderRadius: 10, padding: "20px", textAlign: "center", color: C.muted, fontSize: 13, lineHeight: 1.6 }}>
+            Enter at least one comp with a sale price to see your valuation summary.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── BUY & HOLD ───────────────────────────────────────────────────────────────
-function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults }) {
+function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUpgrade }) {
   const [f, setF] = useState({
     purchasePrice: "", downPercent: "20", interestRate: "7.5", loanTermYears: "30",
     monthlyRent: "", otherIncome: "0", propertyTax: "", insurance: "",
     hoa: "0", maintenance: "", vacancy: "8", mgmt: "0", utilities: "0",
   });
   const [result, setResult] = useState(null);
+  const [showWorksheet, setShowWorksheet] = useState(false);
   const set = (k) => (v) => setF(prev => ({ ...prev, [k]: v }));
 
   const calculate = () => {
@@ -373,10 +725,18 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults }) {
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: result ? "1fr 1fr" : "1fr", gap: 16 }}>
+      {showWorksheet && (
+        <UnderwritingWorksheet
+          onClose={() => setShowWorksheet(false)}
+          onUsePrice={(price) => setF(prev => ({ ...prev, purchasePrice: price }))}
+        />
+      )}
       <div>
         <Card>
           <SectionTitle>Purchase & Financing</SectionTitle>
-          <Field label="Purchase Price" value={f.purchasePrice} onChange={set("purchasePrice")} />
+          <Field label="Purchase Price" value={f.purchasePrice} onChange={set("purchasePrice")}
+            proTip="Not sure what to offer? Use the Underwriting Worksheet."
+            onScrollToPro={isPro ? () => setShowWorksheet(true) : onUpgrade} />
           <div style={{ height: 8 }} />
           <TwoCol>
             <Field label="Down Payment" value={f.downPercent} onChange={set("downPercent")} prefix="%" suffix="" />
@@ -605,6 +965,8 @@ export default function App() {
   const [showEmailCapture, setShowEmailCapture] = useState(false);
   const [captureResults, setCaptureResults] = useState(null);
   const [emailSource, setEmailSource] = useState('analyzer');
+  const [activeTab, setActiveTab] = useState("analyzer");
+  const { isPro, togglePro } = useProAccess();
   const analyzerRef = useRef(null);
   const proRef = useRef(null);
 
@@ -669,13 +1031,16 @@ export default function App() {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <button onClick={scrollToAnalyzer} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "8px 14px", borderRadius: 6 }}>
+            <button onClick={() => { setActiveTab("analyzer"); scrollToAnalyzer(); }} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: activeTab === "analyzer" ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "8px 14px", borderRadius: 6 }}>
               Deal Analyzer
+            </button>
+            <button onClick={() => { setActiveTab("pipeline"); scrollToAnalyzer(); }} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: activeTab === "pipeline" ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "8px 14px", borderRadius: 6 }}>
+              Deal Pipeline
             </button>
             <button onClick={scrollToPro} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "8px 14px", borderRadius: 6 }}>
               Pro Features
             </button>
-            <button style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 7, padding: "8px 16px", color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginLeft: 4 }}>
+            <button onClick={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 7, padding: "8px 16px", color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginLeft: 4 }}>
               Sign In
             </button>
             <button onClick={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} style={{ background: "#22C55E", border: "none", borderRadius: 7, padding: "8px 16px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginLeft: 6, boxShadow: "0 2px 8px rgba(34,197,94,0.35)" }}>
@@ -755,35 +1120,56 @@ export default function App() {
       </div>
 
       <div ref={analyzerRef} style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 32px" }}>
-        <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 4 }}>Deal Analyzer</div>
-            <div style={{ fontSize: 15, color: C.muted }}>Free. No account needed. Get a verdict in under a minute.</div>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <div style={{ display: "flex", background: C.white, borderRadius: 8, padding: 3, gap: 3, border: `1px solid ${C.border}` }}>
-              {[{ id: "hold", label: "Buy & Hold" }, { id: "flip", label: "Fix & Flip" }].map(m => (
-                <button key={m.id} onClick={() => setMode(m.id)} style={{
-                  padding: "8px 20px", borderRadius: 6, border: "none",
-                  background: mode === m.id ? C.green : "transparent",
-                  color: mode === m.id ? C.white : C.muted,
-                  fontWeight: mode === m.id ? 700 : 500,
-                  fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                  transition: "all 0.15s",
-                }}>{m.label}</button>
-              ))}
+        {activeTab === "analyzer" && (
+          <>
+            <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 4 }}>Deal Analyzer</div>
+                <div style={{ fontSize: 15, color: C.muted }}>Free. No account needed. Get a verdict in under a minute.</div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ display: "flex", background: C.white, borderRadius: 8, padding: 3, gap: 3, border: `1px solid ${C.border}` }}>
+                  {[{ id: "hold", label: "Buy & Hold" }, { id: "flip", label: "Fix & Flip" }].map(m => (
+                    <button key={m.id} onClick={() => setMode(m.id)} style={{
+                      padding: "8px 20px", borderRadius: 6, border: "none",
+                      background: mode === m.id ? C.green : "transparent",
+                      color: mode === m.id ? C.white : C.muted,
+                      fontWeight: mode === m.id ? 700 : 500,
+                      fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                      transition: "all 0.15s",
+                    }}>{m.label}</button>
+                  ))}
+                </div>
+                <button onClick={() => setShowSettings(true)} style={{
+                  background: C.white, border: `1px solid ${C.border}`, borderRadius: 8,
+                  width: 40, height: 40, display: "flex", alignItems: "center",
+                  justifyContent: "center", cursor: "pointer", fontSize: 16,
+                }}>⚙️</button>
+              </div>
             </div>
-            <button onClick={() => setShowSettings(true)} style={{
-              background: C.white, border: `1px solid ${C.border}`, borderRadius: 8,
-              width: 40, height: 40, display: "flex", alignItems: "center",
-              justifyContent: "center", cursor: "pointer", fontSize: 16,
-            }}>⚙️</button>
-          </div>
-        </div>
 
-        {mode === "hold"
-          ? <BuyHoldAnalyzer standards={standards} onScrollToPro={scrollToPro} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} />
-          : <FixFlipAnalyzer standards={standards} onScrollToPro={scrollToPro} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} />}
+            {mode === "hold"
+              ? <BuyHoldAnalyzer standards={standards} onScrollToPro={scrollToPro} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} isPro={isPro} onUpgrade={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} />
+              : <FixFlipAnalyzer standards={standards} onScrollToPro={scrollToPro} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} />}
+          </>
+        )}
+
+        {activeTab === "pipeline" && (
+          <>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 4 }}>Deal Pipeline</div>
+              <div style={{ fontSize: 15, color: C.muted }}>Save, compare, and track every deal you analyze.</div>
+            </div>
+            <ProGate
+              isPro={isPro}
+              title="Deal Pipeline"
+              description="Save every deal you analyze. Compare side by side. Track your pipeline from lead to close."
+              onUpgrade={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }}
+            >
+              <DealPipeline />
+            </ProGate>
+          </>
+        )}
       </div>
 
       {/* ─── PRO SECTION ─── */}
@@ -832,7 +1218,7 @@ export default function App() {
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", marginBottom: 28, lineHeight: 1.5 }}>
                 One subscription unlocks everything — web app and mobile app.
               </div>
-              <button style={{
+              <button onClick={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} style={{
                 width: "100%", padding: "15px", background: C.white, border: "none",
                 borderRadius: 10, fontSize: 15, fontWeight: 700, color: C.green,
                 cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginBottom: 12,
@@ -859,7 +1245,7 @@ export default function App() {
           </div>
 
           <div style={{ textAlign: "center" }}>
-            <button style={{
+            <button onClick={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} style={{
               background: C.green, border: "none", borderRadius: 12,
               padding: "16px 48px", color: C.white, fontSize: 16, fontWeight: 700,
               cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
@@ -887,6 +1273,8 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      <DevProToggle isPro={isPro} onToggle={togglePro} />
     </>
   );
 }
