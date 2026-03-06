@@ -80,6 +80,22 @@ function useAuth() {
   return { session, loading, signOut };
 }
 
+// ─── MOBILE DETECTION HOOK ───────────────────────────────────────────────────
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < breakpoint);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener('resize', check);
+    window.addEventListener('orientationchange', check);
+    check();
+    return () => {
+      window.removeEventListener('resize', check);
+      window.removeEventListener('orientationchange', check);
+    };
+  }, [breakpoint]);
+  return isMobile;
+}
+
 // ─── PRO GATE ────────────────────────────────────────────────────────────────
 function ProGate({ isPro, children, title, description, onUpgrade }) {
   if (isPro) return children;
@@ -2744,6 +2760,7 @@ const PROPERTIES_NAV = [
 ];
 
 function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, isPro, onShowCapture, onEmailResults, onSignOut, session }) {
+  const isMobile = useIsMobile();
   const [view, setView] = useState("home");
   const [pipelineNav, setPipelineNav] = useState("dashboard");
   const [propertiesNav, setPropertiesNav] = useState("dashboard");
@@ -2867,12 +2884,12 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           </div>
         </nav>
 
-        <div style={{ maxWidth: 880, margin: "0 auto", padding: "80px 32px" }}>
-          <div style={{ textAlign: "center", marginBottom: 48 }}>
-            <div style={{ fontSize: 32, fontWeight: 800, color: C.text, marginBottom: 8 }}>Welcome back</div>
+        <div style={{ maxWidth: 880, margin: "0 auto", padding: "48px 16px" }}>
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 8 }}>Welcome back</div>
             <div style={{ fontSize: 16, color: C.muted }}>What are you working on today?</div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          <div className="home-picker-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <HomePickerCard
               title="Deal Pipeline"
               desc="Evaluate new deals — analyze, underwrite, compare, and build your pipeline."
@@ -2908,21 +2925,6 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
 
     return (
       <div style={{ minHeight: "100vh", background: C.bg }}>
-        <style>{`
-          @media (max-width: 767px) {
-            .db-sidebar { display: none !important; }
-            .db-topbar { left: 0 !important; padding: 0 16px !important; }
-            .db-main { margin-left: 0 !important; padding: 16px !important; padding-top: 72px !important; padding-bottom: 84px !important; }
-            .db-stat-row { flex-wrap: wrap !important; grid-template-columns: 1fr 1fr !important; }
-            .db-stat-row > div { min-width: calc(50% - 6px) !important; flex: none !important; width: calc(50% - 6px) !important; }
-            .db-deals-header { display: none !important; }
-            .db-deal-row { grid-template-columns: 1fr auto !important; gap: 8px !important; }
-            .db-deal-type { display: none !important; }
-          }
-          @media (min-width: 768px) {
-            .db-bottomtab { display: none !important; }
-          }
-        `}</style>
 
         {showWorksheet && <UnderwritingWorksheet onClose={() => setShowWorksheet(false)} onUsePrice={() => { setShowWorksheet(false); setPipelineNav("analyzer"); }} />}
         {showRehab && <RehabEstimator onClose={() => setShowRehab(false)} onUseCost={() => { setShowRehab(false); setPipelineNav("analyzer"); }} />}
@@ -2971,7 +2973,8 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           </>
         )}
 
-        {/* Desktop sidebar */}
+        {/* Desktop sidebar — hidden on mobile via JS + CSS fallback */}
+        {!isMobile && (
         <div className="db-sidebar" style={sidebarStyle}>
           <div style={{ padding: "18px 16px 24px" }}><DoorBaseLogo /></div>
           <div style={{ padding: "0 10px", flex: 1 }}>
@@ -3010,9 +3013,10 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
             </div>
           </div>
         </div>
+        )}
 
         {/* Top bar */}
-        <div className="db-topbar" style={topBarStyle}>
+        <div className="db-topbar" style={{ ...topBarStyle, ...(isMobile ? { left: 0, padding: '0 16px' } : {}) }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: C.text, fontFamily: "'DM Sans', sans-serif" }}>{dashPanel === "settings" ? "Settings" : dashPanel === "feedback" ? "Beta Feedback" : navTitle}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {pipelineNav === "analyzer" && !dashPanel && (
@@ -3047,7 +3051,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
         )}
 
         {/* Main content */}
-        <div className="db-main" style={{ marginLeft: 220, padding: "28px", paddingTop: 84 }}>
+        <div className="db-main" style={{ marginLeft: isMobile ? 0 : 220, padding: isMobile ? '16px' : '28px', paddingTop: isMobile ? 72 : 84, paddingBottom: isMobile ? 84 : undefined }}>
           {dashPanel === "settings" && <DashSettingsPanel standards={standards} onSaveStandards={onSaveStandards} defaultMode={mode} onSetDefaultMode={setMode} onSignOut={onSignOut} />}
           {dashPanel === "feedback" && <FeedbackPanel />}
           {/* Pipeline Morning Briefing */}
@@ -3141,6 +3145,15 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           {/* Analyzer */}
           {!dashPanel && pipelineNav === "analyzer" && (
             <>
+              {isMobile && (
+                <button onClick={() => setPipelineNav("dashboard")} style={{
+                  display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
+                  fontSize: 14, fontWeight: 600, color: C.green, cursor: "pointer",
+                  fontFamily: "'DM Sans', sans-serif", padding: "8px 0", marginBottom: 12,
+                }}>
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>&larr;</span> Dashboard
+                </button>
+              )}
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 20 }}>
                 <div style={{ display: "flex", background: C.white, borderRadius: 8, padding: 3, gap: 3, border: `1px solid ${C.border}` }}>
                   {[{ id: "hold", label: "Buy & Hold" }, { id: "flip", label: "Fix & Flip" }].map(m => (
@@ -3240,17 +3253,18 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           )}
         </div>
 
-        {/* Mobile bottom tab bar */}
+        {/* Mobile bottom tab bar — JS-driven */}
+        {isMobile && (
         <div className="db-bottomtab" style={{
-          display: "none", position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200,
-          background: C.white, borderTop: `1px solid ${C.border}`, height: 64,
+          display: "flex", position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200,
+          background: C.white, borderTop: "1px solid #E2E8F0", height: 64,
           justifyContent: "space-around", alignItems: "center",
           fontFamily: "'DM Sans', sans-serif",
         }}>
           {[
-            { id: "dashboard", label: "Home", icon: "\u{1F3E0}" },
+            { id: "dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
             { id: "analyzer", label: "Analyzer", icon: "\u{1F4CA}" },
-            { id: "saved", label: "Saved", icon: "\u{1F4CB}" },
+            { id: "saved", label: "Tools", icon: "\u{1F527}" },
             { id: "more", label: "More", icon: "\u2022\u2022\u2022" },
           ].map(tab => {
             const isActive = tab.id === "more" ? showMore : pipelineNav === tab.id;
@@ -3262,12 +3276,13 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
                 cursor: "pointer", padding: "6px 16px",
               }}>
-                <span style={{ fontSize: tab.id === "more" ? 14 : 18, lineHeight: 1, fontWeight: tab.id === "more" ? 900 : 400, color: isActive ? C.green : C.muted }}>{tab.icon}</span>
-                <span style={{ fontSize: 11, fontWeight: isActive ? 700 : 500, color: isActive ? C.green : C.muted }}>{tab.label}</span>
+                <span style={{ fontSize: tab.id === "more" ? 14 : 18, lineHeight: 1, fontWeight: tab.id === "more" ? 900 : 400, color: isActive ? "#22C55E" : C.muted }}>{tab.icon}</span>
+                <span style={{ fontSize: 11, fontWeight: isActive ? 700 : 500, color: isActive ? "#22C55E" : C.muted }}>{tab.label}</span>
               </div>
             );
           })}
         </div>
+        )}
       </div>
     );
   }
@@ -3276,8 +3291,9 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
   if (view === "properties") {
     return (
       <div style={{ minHeight: "100vh", background: C.bg }}>
-        {/* Sidebar */}
-        <div style={sidebarStyle}>
+        {/* Sidebar — hidden on mobile via JS + CSS fallback */}
+        {!isMobile && (
+        <div className="db-sidebar" style={sidebarStyle}>
           <div style={{ padding: "18px 16px 24px" }}><DoorBaseLogo /></div>
           <div style={{ padding: "0 10px", flex: 1 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.mutedLight, textTransform: "uppercase", letterSpacing: "0.1em", padding: "0 14px 8px", fontFamily: "'DM Sans', sans-serif" }}>Property Tools</div>
@@ -3308,9 +3324,10 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
             </div>
           </div>
         </div>
+        )}
 
         {/* Top bar */}
-        <div style={topBarStyle}>
+        <div className="db-topbar" style={{ ...topBarStyle, ...(isMobile ? { left: 0, padding: '0 16px' } : {}) }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: C.text, fontFamily: "'DM Sans', sans-serif" }}>
             {dashPanel === "settings" ? "Settings" : dashPanel === "feedback" ? "Beta Feedback" : (PROPERTIES_NAV.find(n => n.id === propertiesNav) || {}).label || "Portfolio Overview"}
           </div>
@@ -3318,7 +3335,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
         </div>
 
         {/* Main content */}
-        <div style={{ marginLeft: 220, padding: "28px", paddingTop: 84 }}>
+        <div className="db-main" style={{ marginLeft: isMobile ? 0 : 220, padding: isMobile ? '16px' : '28px', paddingTop: isMobile ? 72 : 84, paddingBottom: isMobile ? 84 : undefined }}>
           {dashPanel === "settings" && <DashSettingsPanel standards={standards} onSaveStandards={onSaveStandards} defaultMode={mode} onSetDefaultMode={setMode} onSignOut={onSignOut} />}
           {dashPanel === "feedback" && <FeedbackPanel />}
           {!dashPanel && propertiesNav === "dashboard" && (() => {
@@ -3357,7 +3374,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
 
               {/* Row 2 — Needs Attention */}
               <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Needs Attention</div>
-              <div className="db-stat-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 28 }}>
+              <div className="db-attention-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 28 }}>
                 {/* Late payments */}
                 <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px" }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: C.red, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Late Payments</div>
@@ -3450,7 +3467,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 </div>
               ) : (
               <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 0.7fr 1fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+                <div className="db-prop-header" style={{ display: "grid", gridTemplateColumns: "2fr 0.7fr 1fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, background: C.bg }}>
                   {["Address", "Units", "Rent", "Cash Flow", "Status"].map((h, i) => (
                     <span key={h} style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", textAlign: i === 4 ? "right" : "left" }}>{h}</span>
                   ))}
@@ -3458,7 +3475,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 {properties.map((p, i) => {
                   const cf = (p.monthly_rent || 0) - (p.monthly_expenses || 0);
                   return (
-                  <div key={p.id} style={{ display: "grid", gridTemplateColumns: "2fr 0.7fr 1fr 1fr 1fr", padding: "14px 16px", borderBottom: i < properties.length - 1 ? `1px solid ${C.border}` : "none", alignItems: "center" }}>
+                  <div key={p.id} className="db-prop-row" style={{ display: "grid", gridTemplateColumns: "2fr 0.7fr 1fr 1fr 1fr", padding: "14px 16px", borderBottom: i < properties.length - 1 ? `1px solid ${C.border}` : "none", alignItems: "center" }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.address}</div>
                     <span style={{ fontSize: 13, color: C.muted }}>{p.units || 1}</span>
                     <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{fmtD(p.monthly_rent || 0)}/mo</span>
@@ -3485,6 +3502,74 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           {!dashPanel && propertiesNav === "financing" && <FinancingTracker session={session} />}
           {!dashPanel && propertiesNav === "leases" && <LeaseRenewalTracker session={session} />}
         </div>
+
+        {/* Mobile bottom tab bar — JS-driven */}
+        {isMobile && (
+        <div className="db-bottomtab" style={{
+          display: "flex", position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200,
+          background: C.white, borderTop: "1px solid #E2E8F0", height: 64,
+          justifyContent: "space-around", alignItems: "center",
+          fontFamily: "'DM Sans', sans-serif",
+        }}>
+          {[
+            { id: "dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
+            { id: "overview", label: "Portfolio", icon: "\u{1F3D8}" },
+            { id: "tenants", label: "Tenants", icon: "\u{1F464}" },
+            { id: "more", label: "More", icon: "\u2022\u2022\u2022" },
+          ].map(tab => {
+            const isActive = tab.id === "more" ? showMore : propertiesNav === tab.id;
+            return (
+              <div key={tab.id} onClick={() => {
+                if (tab.id === "more") setShowMore(prev => !prev);
+                else { setShowMore(false); setDashPanel(null); setPropertiesNav(tab.id); }
+              }} style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                cursor: "pointer", padding: "6px 16px",
+              }}>
+                <span style={{ fontSize: tab.id === "more" ? 14 : 18, lineHeight: 1, fontWeight: tab.id === "more" ? 900 : 400, color: isActive ? "#22C55E" : C.muted }}>{tab.icon}</span>
+                <span style={{ fontSize: 11, fontWeight: isActive ? 700 : 500, color: isActive ? "#22C55E" : C.muted }}>{tab.label}</span>
+              </div>
+            );
+          })}
+        </div>
+        )}
+
+        {/* More drawer — mobile only */}
+        {showMore && (
+          <>
+            <div onClick={() => setShowMore(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 300 }} />
+            <div style={{
+              position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 301,
+              background: C.white, borderRadius: "16px 16px 0 0",
+              padding: "24px", paddingBottom: 32,
+              boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",
+              fontFamily: "'DM Sans', sans-serif",
+            }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border, margin: "0 auto 20px" }} />
+              {[
+                { id: "cashflow", label: "Cash Flow Tracker" },
+                { id: "financing", label: "Financing Tracker" },
+                { id: "leases", label: "Lease Renewals" },
+              ].map((item, i) => (
+                <div key={i} onClick={() => { setShowMore(false); setDashPanel(null); setPropertiesNav(item.id); }} style={{
+                  padding: "14px 0", borderBottom: `1px solid ${C.border}`,
+                  cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600,
+                }}>
+                  {item.label}
+                </div>
+              ))}
+              <div style={{ height: 1, background: C.border, margin: "8px 0" }} />
+              <div onClick={() => { setShowMore(false); setDashPanel("settings"); }} style={{ padding: "14px 0", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10, cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                Settings
+              </div>
+              <div onClick={() => { setShowMore(false); setDashPanel("feedback"); }} style={{ padding: "14px 0", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                Feedback
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -3543,6 +3628,30 @@ export default function App() {
         .hero-btn-primary:hover { background: #15803d !important; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(22,163,74,0.5) !important; }
         .hero-btn-secondary:hover { background: rgba(255,255,255,0.25) !important; transform: translateY(-2px); }
         .pro-card:hover { border-color: #86efac !important; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important; }
+        @media (max-width: 767px) {
+          .db-sidebar { display: none !important; }
+          .db-topbar { left: 0 !important; padding: 0 16px !important; }
+          .db-main { margin-left: 0 !important; padding: 16px !important; padding-top: 72px !important; padding-bottom: 84px !important; }
+          .db-stat-row { flex-wrap: wrap !important; grid-template-columns: 1fr 1fr !important; }
+          .db-stat-row > div { min-width: calc(50% - 6px) !important; flex: none !important; width: calc(50% - 6px) !important; }
+          .db-bottomtab { display: flex !important; }
+          .db-deals-header { display: none !important; }
+          .db-deal-row { grid-template-columns: 1fr auto !important; gap: 8px !important; }
+          .db-deal-type { display: none !important; }
+          .home-picker-grid { grid-template-columns: 1fr !important; }
+          .landing-intro-grid { grid-template-columns: 1fr !important; }
+          .landing-feature-grid { grid-template-columns: 1fr 1fr !important; }
+          .landing-hero-title { font-size: 24px !important; }
+          .db-prop-header { display: none !important; }
+          .db-prop-row { grid-template-columns: 1fr auto !important; }
+          .db-prop-row > span:nth-child(2),
+          .db-prop-row > span:nth-child(3),
+          .db-prop-row > span:nth-child(4) { display: none !important; }
+          .db-attention-row { grid-template-columns: 1fr !important; }
+        }
+        @media (min-width: 768px) {
+          .db-bottomtab { display: none !important; }
+        }
       `}</style>
 
       {showSettings && <SettingsPanel standards={standards} onSave={setStandards} onClose={() => setShowSettings(false)} />}
@@ -3741,7 +3850,7 @@ export default function App() {
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center" }}>
             <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 32px", width: "100%" }}>
               <div style={{ maxWidth: 500 }}>
-                <div style={{ fontSize: 36, fontWeight: 800, color: C.white, lineHeight: 1.2, marginBottom: 12 }}>
+                <div className="landing-hero-title" style={{ fontSize: 36, fontWeight: 800, color: C.white, lineHeight: 1.2, marginBottom: 12 }}>
                   Still running your portfolio out of spreadsheets?
                 </div>
                 <div style={{ fontSize: 16, color: "rgba(255,255,255,0.8)", lineHeight: 1.6 }}>
@@ -3755,7 +3864,7 @@ export default function App() {
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "56px 32px" }}>
 
           {/* Intro copy + price side by side */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 48, marginBottom: 56, alignItems: "start" }}>
+          <div className="landing-intro-grid" style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 48, marginBottom: 56, alignItems: "start" }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>DoorBase Pro</div>
               <div style={{ fontSize: 28, fontWeight: 800, color: C.text, lineHeight: 1.25, marginBottom: 16 }}>
@@ -3789,7 +3898,7 @@ export default function App() {
 
           {/* Feature grid */}
           <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 20 }}>Everything included in Pro</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 40 }}>
+          <div className="landing-feature-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 40 }}>
             {proFeatures.map((f, i) => (
               <div key={i} className="pro-card" style={{
                 background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12,
