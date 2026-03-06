@@ -96,30 +96,7 @@ function useIsMobile(breakpoint = 768) {
   return isMobile;
 }
 
-// ─── PRO GATE ────────────────────────────────────────────────────────────────
-function ProGate({ isPro, children, title, description, onUpgrade }) {
-  if (isPro) return children;
-  return (
-    <div style={{
-      background: C.bg, border: `1.5px dashed ${C.border}`, borderRadius: 14,
-      padding: "40px 24px", textAlign: "center",
-    }}>
-      <div style={{ fontSize: 32, marginBottom: 12 }}>&#128274;</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 6 }}>
-        {title || "Pro Feature"}
-      </div>
-      <div style={{ fontSize: 14, color: C.muted, lineHeight: 1.6, marginBottom: 20, maxWidth: 400, margin: "0 auto 20px" }}>
-        {description || "This tool is available with DoorBase Pro."}
-      </div>
-      <button onClick={onUpgrade} style={{
-        background: C.green, border: "none", borderRadius: 10,
-        padding: "12px 28px", color: C.white, fontSize: 14, fontWeight: 700,
-        cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-        boxShadow: "0 2px 8px rgba(22,163,74,0.3)",
-      }}>Get Early Access — Free</button>
-    </div>
-  );
-}
+
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
 function AuthScreen({ onBack }) {
@@ -225,58 +202,6 @@ function AuthScreen({ onBack }) {
   );
 }
 
-// ─── DEAL PIPELINE (Pro stub) ────────────────────────────────────────────────
-function DealPipeline() {
-  const [deals] = useState([
-    { id: 1, address: "123 Oak St", type: "hold", verdict: "green", cashFlow: 312, date: "2026-03-01" },
-    { id: 2, address: "456 Elm Ave", type: "flip", verdict: "yellow", cashFlow: null, profit: 18500, date: "2026-02-28" },
-    { id: 3, address: "789 Pine Rd", type: "hold", verdict: "red", cashFlow: -87, date: "2026-02-25" },
-  ]);
-  const verdictStyle = (v) => ({
-    green: { bg: C.greenLight, color: C.greenDark, label: "DEAL WORKS" },
-    yellow: { bg: C.yellowLight, color: C.yellowDark, label: "MARGINAL" },
-    red: { bg: C.redLight, color: C.red, label: "PASS" },
-  }[v]);
-  return (
-    <div>
-      <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Deal Pipeline</div>
-      <div style={{ fontSize: 14, color: C.muted, marginBottom: 20 }}>Every deal you analyze, saved and compared.</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {deals.map(d => {
-          const vs = verdictStyle(d.verdict);
-          return (
-            <div key={d.id} style={{
-              background: C.white, border: `1px solid ${C.border}`, borderRadius: 10,
-              padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
-            }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{d.address}</div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
-                  {d.type === "hold" ? "Buy & Hold" : "Fix & Flip"} · {d.date}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
-                  {d.type === "hold" ? fmtD(d.cashFlow) + "/mo" : fmtD(d.profit)}
-                </div>
-                <div style={{
-                  background: vs.bg, color: vs.color, fontSize: 11, fontWeight: 700,
-                  padding: "4px 10px", borderRadius: 6, letterSpacing: "0.04em",
-                }}>{vs.label}</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div style={{
-        marginTop: 16, padding: "12px", border: `1.5px dashed ${C.border}`, borderRadius: 10,
-        textAlign: "center", color: C.muted, fontSize: 13, cursor: "pointer",
-      }}>
-        + Analyze a deal to add it here
-      </div>
-    </div>
-  );
-}
 
 // ─── EMAIL CAPTURE MODAL ──────────────────────────────────────────────────────
 function EmailCaptureModal({ onClose, results, mode, source = 'analyzer' }) {
@@ -388,7 +313,6 @@ function EmailCaptureModal({ onClose, results, mode, source = 'analyzer' }) {
 }
 
 const HERO_IMG = "/hero.png";
-const DESK_IMG = "/desk.png";
 
 // ─── PRO TRIGGER ──────────────────────────────────────────────────────────────
 function ProTrigger({ text, onScrollToPro }) {
