@@ -1,4 +1,19 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// IMPORTANT: Replace anon key below with your real Supabase anon key (starts with eyJ...)
+// Find it at: Supabase Dashboard → Settings → API → Project API keys → anon / public
+const SUPABASE_URL = "https://fwbdcrjfydejzxcldnrf.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3YmRjcmpmeWRlanp4Y2xkbnJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3NTYxODksImV4cCI6MjA4ODMzMjE4OX0.TTSp27ZvM1Nmp1IraFI7_zyqO9b_WEJSSCCvvw8aWiE";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+window.__supabase = supabase; // expose for console debugging
+
+// Debug helper — logs every Supabase result so we can see failures
+const dbLog = (label, { data, error }) => {
+  if (error) console.error(`[DB ${label}] ERROR:`, error.message, error);
+  else console.log(`[DB ${label}] OK:`, data);
+  return { data, error };
+};
 
 const C = {
   white: "#ffffff",
@@ -32,25 +47,40 @@ const DEFAULT_STANDARDS = {
   flip: { greenProfit: 25000, greenROI: 15, yellowProfit: 10000, yellowROI: 8 },
 };
 
-// ─── PRO ACCESS HOOK ─────────────────────────────────────────────────────────
-// Development-only toggle. Swap internals for real auth + Stripe when ready.
-function useProAccess() {
-  const [isPro, setIsPro] = useState(() => {
-    try { return localStorage.getItem("doorbase_pro") === "true"; }
-    catch { return false; }
-  });
-  const togglePro = useCallback(() => {
-    setIsPro(prev => {
-      const next = !prev;
-      try { localStorage.setItem("doorbase_pro", String(next)); } catch {}
-      return next;
+// Startup diagnostic
+console.log("[DoorBase] Supabase URL:", SUPABASE_URL);
+console.log("[DoorBase] Anon key starts with:", SUPABASE_ANON_KEY.substring(0, 10) + "...");
+console.log("[DoorBase] Key looks like JWT:", SUPABASE_ANON_KEY.startsWith("eyJ"));
+if (!SUPABASE_ANON_KEY.startsWith("eyJ")) {
+  console.error("[DoorBase] WARNING: Supabase anon key does NOT look like a valid JWT. All DB calls will fail. Go to Supabase Dashboard → Settings → API → copy the 'anon public' key.");
+}
+
+// ─── AUTH HOOK ───────────────────────────────────────────────────────────────
+function useAuth() {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      console.log("[DoorBase] Auth session:", s ? `Logged in as ${s.user.email}` : "No session");
+      setSession(s);
+      setLoading(false);
     });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+    });
+    return () => subscription.unsubscribe();
   }, []);
-  return { isPro, togglePro };
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+  }, []);
+
+  return { session, loading, signOut };
 }
 
 // ─── PRO GATE ────────────────────────────────────────────────────────────────
-// Wrap any pro-only UI. Shows locked state when isPro is false.
 function ProGate({ isPro, children, title, description, onUpgrade }) {
   if (isPro) return children;
   return (
@@ -58,7 +88,7 @@ function ProGate({ isPro, children, title, description, onUpgrade }) {
       background: C.bg, border: `1.5px dashed ${C.border}`, borderRadius: 14,
       padding: "40px 24px", textAlign: "center",
     }}>
-      <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+      <div style={{ fontSize: 32, marginBottom: 12 }}>&#128274;</div>
       <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 6 }}>
         {title || "Pro Feature"}
       </div>
@@ -70,25 +100,112 @@ function ProGate({ isPro, children, title, description, onUpgrade }) {
         padding: "12px 28px", color: C.white, fontSize: 14, fontWeight: 700,
         cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
         boxShadow: "0 2px 8px rgba(22,163,74,0.3)",
-      }}>Join the Founding 50</button>
+      }}>Get Early Access — Free</button>
     </div>
   );
 }
 
-// ─── DEV PRO TOGGLE ──────────────────────────────────────────────────────────
-function DevProToggle({ isPro, onToggle }) {
-  if (process.env.NODE_ENV !== "development") return null;
+// ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
+function AuthScreen({ onBack }) {
+  const [isSignUp, setIsSignUp] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    setError("");
+    setLoading(true);
+    if (isSignUp) {
+      const { error: err } = await supabase.auth.signUp({ email, password });
+      if (err) setError(err.message);
+    } else {
+      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+      if (err) setError(err.message);
+    }
+    setLoading(false);
+  };
+
+  const inp = {
+    width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.08)",
+    border: `1.5px solid ${error ? C.red : "rgba(255,255,255,0.15)"}`,
+    borderRadius: 10, fontSize: 15, color: C.white,
+    fontFamily: "'DM Sans', sans-serif", outline: "none",
+    boxSizing: "border-box",
+  };
+
   return (
-    <button onClick={onToggle} style={{
-      position: "fixed", bottom: 16, right: 16, zIndex: 9999,
-      background: isPro ? C.green : "#6B7280", color: C.white,
-      border: "none", borderRadius: 8, padding: "8px 14px",
-      fontSize: 12, fontWeight: 700, cursor: "pointer",
-      fontFamily: "'DM Sans', sans-serif",
-      boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
+    <div style={{
+      minHeight: "100vh", background: C.nav,
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      fontFamily: "'DM Sans', sans-serif", padding: 24,
     }}>
-      {isPro ? "PRO ON" : "PRO OFF"} (dev)
-    </button>
+      <div style={{ textAlign: "center", maxWidth: 400, width: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 40 }}>
+          <svg width="36" height="36" viewBox="0 0 40 40" fill="none">
+            <path d="M8 34 L8 8 L28 8 L28 34" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            <path d="M8 8 L8 34 L20 31 L20 11 Z" fill="#22C55E" opacity="0.9"/>
+            <circle cx="18" cy="21" r="1.5" fill="white" opacity="0.9"/>
+            <line x1="4" y1="34" x2="32" y2="34" stroke="#22C55E" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          <div style={{ display: "flex", alignItems: "baseline" }}>
+            <span style={{ fontSize: 24, fontWeight: 800, color: C.white, letterSpacing: "-0.02em" }}>Door</span>
+            <span style={{ fontSize: 24, fontWeight: 800, color: C.green, letterSpacing: "-0.02em" }}>Base</span>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 28, fontWeight: 800, color: C.white, marginBottom: 10 }}>
+          {isSignUp ? "Get Early Access" : "Welcome Back"}
+        </div>
+        <div style={{ fontSize: 15, color: "rgba(255,255,255,0.55)", marginBottom: 32, lineHeight: 1.6 }}>
+          {isSignUp ? "Create your free account to unlock the full dashboard." : "Sign in to your DoorBase account."}
+        </div>
+
+        <input
+          value={email}
+          onChange={e => { setEmail(e.target.value); setError(""); }}
+          onKeyDown={e => e.key === "Enter" && handleSubmit()}
+          placeholder="Email"
+          type="email"
+          style={{ ...inp, marginBottom: 12 }}
+        />
+        <input
+          value={password}
+          onChange={e => { setPassword(e.target.value); setError(""); }}
+          onKeyDown={e => e.key === "Enter" && handleSubmit()}
+          placeholder="Password"
+          type="password"
+          style={{ ...inp, marginBottom: error ? 8 : 16 }}
+        />
+
+        {error && (
+          <div style={{ fontSize: 13, color: C.red, marginBottom: 16, lineHeight: 1.5, textAlign: "left" }}>
+            {error}
+          </div>
+        )}
+
+        <button onClick={handleSubmit} disabled={loading} style={{
+          width: "100%", padding: "14px", background: C.green, border: "none",
+          borderRadius: 10, color: C.white, fontSize: 15, fontWeight: 700,
+          cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif",
+          boxShadow: "0 2px 12px rgba(22,163,74,0.4)", marginBottom: 20,
+          opacity: loading ? 0.7 : 1,
+        }}>{loading ? "..." : isSignUp ? "Get Early Access \u2014 Free" : "Sign In"}</button>
+
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
+          {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+          <span onClick={() => { setIsSignUp(!isSignUp); setError(""); }} style={{ color: C.green, cursor: "pointer", fontWeight: 600 }}>
+            {isSignUp ? "Sign In" : "Sign Up"}
+          </span>
+        </div>
+
+        <div style={{ marginTop: 24 }}>
+          <span onClick={onBack} style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", cursor: "pointer" }}>
+            &#8592; Back to site
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -145,10 +262,6 @@ function DealPipeline() {
   );
 }
 
-// ─── FOUNDING 50 COUNTER ──────────────────────────────────────────────────────
-const FOUNDING_SPOTS = 50;
-const SPOTS_TAKEN = 11; // update this manually as signups come in
-
 // ─── EMAIL CAPTURE MODAL ──────────────────────────────────────────────────────
 function EmailCaptureModal({ onClose, results, mode, source = 'analyzer' }) {
   const [email, setEmail] = useState("");
@@ -166,7 +279,7 @@ function EmailCaptureModal({ onClose, results, mode, source = 'analyzer' }) {
           email,
           utm_source: "doorbase",
           utm_medium: "deal_analyzer",
-          utm_campaign: "founding50",
+          utm_campaign: "beta_access",
         }),
       });
       // Beehiiv redirects on success - either way we treat as success
@@ -203,13 +316,13 @@ function EmailCaptureModal({ onClose, results, mode, source = 'analyzer' }) {
                 {source === 'pro' ? (
                   <>
                     <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
-                      Founding 50 — {FOUNDING_SPOTS - SPOTS_TAKEN} spots left
+                      Beta Access
                     </div>
                     <div style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1.2, marginBottom: 8 }}>
                       Get in free<br />while we build.
                     </div>
                     <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.65 }}>
-                      Pro is coming. The first 50 get it free. Drop your email and we'll reach out before anyone else.
+                      Pro is coming. Drop your email and we'll reach out before anyone else.
                     </div>
                   </>
                 ) : (
@@ -232,7 +345,7 @@ function EmailCaptureModal({ onClose, results, mode, source = 'analyzer' }) {
             {source === 'analyzer' && (
               <div style={{ background: C.yellowLight, border: `1px solid ${C.yellowBorder}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
                 <div style={{ fontSize: 12, color: C.yellowDark, lineHeight: 1.5 }}>
-                  <strong>Founding 50:</strong> {FOUNDING_SPOTS - SPOTS_TAKEN} spots left. Pro is free for early members.
+                  <strong>Beta Access:</strong> Pro is free while we build.
                 </div>
               </div>
             )}
@@ -686,7 +799,7 @@ function UnderwritingWorksheet({ onClose, onUsePrice }) {
 }
 
 // ─── BUY & HOLD ───────────────────────────────────────────────────────────────
-function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUpgrade }) {
+function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUpgrade, session, onDealSaved }) {
   const [f, setF] = useState({
     purchasePrice: "", downPercent: "20", interestRate: "7.5", loanTermYears: "30",
     monthlyRent: "", otherIncome: "0", propertyTax: "", insurance: "",
@@ -694,6 +807,7 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
   });
   const [result, setResult] = useState(null);
   const [showWorksheet, setShowWorksheet] = useState(false);
+  const [showRentAnalysis, setShowRentAnalysis] = useState(false);
   const set = (k) => (v) => setF(prev => ({ ...prev, [k]: v }));
 
   const calculate = () => {
@@ -721,6 +835,18 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
     if (cashFlow >= s.greenCashFlow && capRate >= s.greenCapRate) verdict = "green";
     else if (cashFlow >= s.yellowCashFlow && capRate >= s.yellowCapRate) verdict = "yellow";
     setResult({ mortgage, grossRent, vacancyLoss, effectiveIncome, opEx, noi, cashFlow, annualCashFlow, capRate, cashOnCash, grm, expenseRatio, verdict, down, loanAmt });
+    if (session) {
+      supabase.from("deals").insert({
+        user_id: session.user.id,
+        address: f.purchasePrice ? `Deal — ${fmtD(price)}` : "Untitled Deal",
+        deal_type: "hold",
+        verdict,
+        cash_flow: Math.round(cashFlow),
+        cap_rate: Math.round(capRate * 100) / 100,
+        purchase_price: Math.round(price),
+        inputs: f,
+      }).select().single().then(res => { dbLog("deals.insert(hold)", res); if (onDealSaved) onDealSaved(); });
+    }
   };
 
   return (
@@ -729,6 +855,12 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
         <UnderwritingWorksheet
           onClose={() => setShowWorksheet(false)}
           onUsePrice={(price) => setF(prev => ({ ...prev, purchasePrice: price }))}
+        />
+      )}
+      {showRentAnalysis && (
+        <RentAnalysisWorksheet
+          onClose={() => setShowRentAnalysis(false)}
+          onUseRent={(rent) => setF(prev => ({ ...prev, monthlyRent: rent }))}
         />
       )}
       <div>
@@ -748,8 +880,8 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
         <Card>
           <SectionTitle>Income</SectionTitle>
           <Field label="Monthly Rent" value={f.monthlyRent} onChange={set("monthlyRent")}
-            proTip="Not sure what this rents for? Pro has a Rent Analysis Worksheet."
-            onScrollToPro={onScrollToPro} />
+            proTip="Not sure what this rents for? Use the Rent Analysis Worksheet."
+            onScrollToPro={isPro ? () => setShowRentAnalysis(true) : onUpgrade} />
           <div style={{ height: 8 }} />
           <TwoCol>
             <Field label="Other Income / Mo" value={f.otherIncome} onChange={set("otherIncome")} />
@@ -837,14 +969,290 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
   );
 }
 
+// ─── REHAB ESTIMATOR ─────────────────────────────────────────────────────────
+const REHAB_ROOMS = [
+  { id: "kitchen", label: "Kitchen", items: [
+    { name: "Cabinets", low: 3000, high: 15000 },
+    { name: "Countertops", low: 1500, high: 6000 },
+    { name: "Appliances", low: 2000, high: 8000 },
+    { name: "Flooring", low: 800, high: 4000 },
+    { name: "Backsplash", low: 400, high: 2000 },
+    { name: "Sink / Faucet", low: 200, high: 800 },
+    { name: "Lighting", low: 150, high: 1000 },
+    { name: "Paint", low: 150, high: 500 },
+  ]},
+  { id: "bathroom", label: "Bathroom", items: [
+    { name: "Vanity / Sink", low: 300, high: 2500 },
+    { name: "Tub / Shower", low: 500, high: 5000 },
+    { name: "Tile Work", low: 800, high: 4000 },
+    { name: "Toilet", low: 150, high: 600 },
+    { name: "Flooring", low: 400, high: 2000 },
+    { name: "Fixtures / Hardware", low: 100, high: 800 },
+    { name: "Paint", low: 100, high: 300 },
+  ]},
+  { id: "bedroom", label: "Bedroom", items: [
+    { name: "Flooring", low: 600, high: 3000 },
+    { name: "Paint", low: 150, high: 500 },
+    { name: "Closet / Doors", low: 200, high: 1500 },
+    { name: "Lighting", low: 75, high: 500 },
+    { name: "Windows", low: 300, high: 2000 },
+  ]},
+  { id: "living", label: "Living Areas", items: [
+    { name: "Flooring", low: 1000, high: 5000 },
+    { name: "Paint", low: 300, high: 1000 },
+    { name: "Lighting", low: 150, high: 800 },
+    { name: "Windows", low: 500, high: 3000 },
+    { name: "Trim / Baseboards", low: 200, high: 1200 },
+  ]},
+  { id: "exterior", label: "Exterior", items: [
+    { name: "Roof", low: 4000, high: 15000 },
+    { name: "Siding / Paint", low: 2000, high: 10000 },
+    { name: "Landscaping", low: 500, high: 5000 },
+    { name: "Driveway / Walkway", low: 500, high: 4000 },
+    { name: "Gutters", low: 300, high: 1500 },
+    { name: "Deck / Patio", low: 500, high: 5000 },
+    { name: "Fence", low: 500, high: 4000 },
+  ]},
+  { id: "systems", label: "Major Systems", items: [
+    { name: "HVAC", low: 3000, high: 12000 },
+    { name: "Electrical Panel", low: 1000, high: 4000 },
+    { name: "Plumbing", low: 1000, high: 8000 },
+    { name: "Water Heater", low: 800, high: 2500 },
+    { name: "Foundation", low: 2000, high: 15000 },
+  ]},
+  { id: "general", label: "General / Permits", items: [
+    { name: "Dumpster / Cleanup", low: 300, high: 1500 },
+    { name: "Permits", low: 200, high: 2000 },
+    { name: "Contingency (10–15%)", low: 0, high: 0 },
+  ]},
+];
+
+function RehabEstimator({ onClose, onUseCost }) {
+  const [costs, setCosts] = useState(() => {
+    const init = {};
+    REHAB_ROOMS.forEach(room => {
+      init[room.id] = {};
+      room.items.forEach(item => { init[room.id][item.name] = ""; });
+    });
+    return init;
+  });
+  const [expandedRoom, setExpandedRoom] = useState("kitchen");
+  const [contingencyPct, setContingencyPct] = useState("10");
+
+  const setCost = (roomId, itemName, val) => {
+    setCosts(prev => ({ ...prev, [roomId]: { ...prev[roomId], [itemName]: val } }));
+  };
+
+  const roomTotal = (roomId) => {
+    const room = costs[roomId];
+    return Object.values(room).reduce((sum, v) => sum + num(v), 0);
+  };
+
+  const subtotal = REHAB_ROOMS.reduce((sum, room) => sum + roomTotal(room.id), 0);
+  const contingency = subtotal * (num(contingencyPct) / 100);
+  const grandTotal = subtotal + contingency;
+
+  const roomsWithCosts = REHAB_ROOMS.filter(r => roomTotal(r.id) > 0);
+
+  const inputStyle = {
+    width: "100%", padding: "8px 10px",
+    background: C.inputBg, border: `1.5px solid ${C.border}`,
+    borderRadius: 8, fontSize: 13, color: C.text,
+    fontFamily: "'DM Sans', sans-serif", outline: "none",
+    boxSizing: "border-box",
+  };
+
+  const labelStyle = { display: "block", fontSize: 11, fontWeight: 600, color: C.muted, marginBottom: 4 };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{
+        background: C.white, borderRadius: 16, width: "100%", maxWidth: 720,
+        padding: "28px", maxHeight: "92vh", overflowY: "auto",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+          <div>
+            <div style={{ display: "inline-block", background: C.greenLight, borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: C.greenDark, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>Pro Tool</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Rehab Estimator</div>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>Build your rehab budget room by room. Enter only what applies — skip the rest.</div>
+          </div>
+          <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}>✕</button>
+        </div>
+
+        <div style={{ height: 1, background: C.border, marginBottom: 20 }} />
+
+        {/* Running total bar */}
+        <div style={{
+          background: grandTotal > 0 ? C.greenLight : C.bg,
+          border: `1px solid ${grandTotal > 0 ? "#86efac" : C.border}`,
+          borderRadius: 10, padding: "12px 16px", marginBottom: 20,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          position: "sticky", top: 0, zIndex: 1,
+        }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: grandTotal > 0 ? C.greenDark : C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Total Rehab Estimate</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: grandTotal > 0 ? C.greenDark : C.muted }}>{fmtD(grandTotal)}</div>
+          </div>
+          {grandTotal > 0 && (
+            <div style={{ textAlign: "right", fontSize: 12, color: C.greenDark }}>
+              <div>Subtotal: {fmtD(subtotal)}</div>
+              <div>Contingency ({contingencyPct}%): {fmtD(contingency)}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Room accordion */}
+        {REHAB_ROOMS.map(room => {
+          const isOpen = expandedRoom === room.id;
+          const total = roomTotal(room.id);
+          return (
+            <div key={room.id} style={{ marginBottom: 6 }}>
+              <div
+                onClick={() => setExpandedRoom(isOpen ? null : room.id)}
+                style={{
+                  background: isOpen ? C.bg : C.white,
+                  border: `1px solid ${total > 0 ? "#86efac" : C.border}`,
+                  borderRadius: isOpen ? "10px 10px 0 0" : 10,
+                  padding: "12px 16px", cursor: "pointer",
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  transition: "all 0.15s",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 14, transform: isOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s", display: "inline-block" }}>▸</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{room.label}</span>
+                </div>
+                {total > 0 && (
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.greenDark }}>{fmtD(total)}</span>
+                )}
+              </div>
+              {isOpen && (
+                <div style={{
+                  background: C.bg, border: `1px solid ${C.border}`, borderTop: "none",
+                  borderRadius: "0 0 10px 10px", padding: "12px 16px",
+                }}>
+                  {room.items.map(item => (
+                    <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={labelStyle}>
+                          {item.name}
+                          {item.low > 0 && <span style={{ fontWeight: 400, color: C.mutedLight }}> · {fmtD(item.low)}–{fmtD(item.high)}</span>}
+                        </label>
+                        <div style={{ position: "relative" }}>
+                          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.mutedLight, fontSize: 12 }}>$</span>
+                          <input
+                            type="number"
+                            value={costs[room.id][item.name]}
+                            onChange={e => setCost(room.id, item.name, e.target.value)}
+                            placeholder="0"
+                            style={{ ...inputStyle, paddingLeft: 22 }}
+                          />
+                        </div>
+                      </div>
+                      {item.low > 0 && (
+                        <div style={{ display: "flex", gap: 4, paddingTop: 18 }}>
+                          <button onClick={() => setCost(room.id, item.name, String(item.low))} style={{
+                            background: C.white, border: `1px solid ${C.border}`, borderRadius: 6,
+                            padding: "4px 8px", fontSize: 10, fontWeight: 600, color: C.muted,
+                            cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                          }}>Low</button>
+                          <button onClick={() => setCost(room.id, item.name, String(Math.round((item.low + item.high) / 2)))} style={{
+                            background: C.white, border: `1px solid ${C.border}`, borderRadius: 6,
+                            padding: "4px 8px", fontSize: 10, fontWeight: 600, color: C.muted,
+                            cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                          }}>Mid</button>
+                          <button onClick={() => setCost(room.id, item.name, String(item.high))} style={{
+                            background: C.white, border: `1px solid ${C.border}`, borderRadius: 6,
+                            padding: "4px 8px", fontSize: 10, fontWeight: 600, color: C.muted,
+                            cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                          }}>High</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Contingency */}
+        <div style={{ marginTop: 16, marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Contingency</div>
+          <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "end" }}>
+              <div>
+                <label style={labelStyle}>Contingency %</label>
+                <input type="number" value={contingencyPct} onChange={e => setContingencyPct(e.target.value)} placeholder="10" style={inputStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, marginBottom: 4 }}>Contingency Amount</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{fmtD(contingency)}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+              Most flippers budget 10–15%. Covers surprises behind walls, permit overruns, and scope creep.
+            </div>
+          </div>
+        </div>
+
+        {/* Summary breakdown */}
+        {roomsWithCosts.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Cost Breakdown</div>
+            <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 20 }}>
+              {roomsWithCosts.map((room, i) => (
+                <div key={room.id} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "6px 0", borderBottom: i < roomsWithCosts.length - 1 ? `1px solid ${C.border}` : "none",
+                }}>
+                  <span style={{ fontSize: 13, color: C.muted }}>{room.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{fmtD(roomTotal(room.id))}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
+                <span style={{ fontSize: 13, color: C.muted }}>Contingency ({contingencyPct}%)</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{fmtD(contingency)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0 2px", borderTop: `2px solid ${C.green}`, marginTop: 4 }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: C.greenDark }}>Grand Total</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: C.greenDark }}>{fmtD(grandTotal)}</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Use button */}
+        <button
+          onClick={() => { onUseCost(Math.round(grandTotal).toString()); onClose(); }}
+          disabled={grandTotal <= 0}
+          style={{
+            width: "100%", padding: "14px", background: grandTotal > 0 ? C.green : C.border,
+            border: "none", borderRadius: 10, color: C.white, fontSize: 15, fontWeight: 700,
+            cursor: grandTotal > 0 ? "pointer" : "default",
+            fontFamily: "'DM Sans', sans-serif",
+            boxShadow: grandTotal > 0 ? "0 2px 8px rgba(22,163,74,0.3)" : "none",
+          }}
+        >
+          {grandTotal > 0 ? `Use ${fmtD(grandTotal)} as Rehab Cost` : "Enter costs above to continue"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── FIX & FLIP ───────────────────────────────────────────────────────────────
-function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults }) {
+function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUpgrade, session, onDealSaved }) {
   const [f, setF] = useState({
     purchasePrice: "", closingCostsBuy: "3", rehabCost: "",
     holdingMonths: "6", monthlyHolding: "", arvEstimate: "",
     closingCostsSell: "8", financeAmt: "", interestRate: "10",
   });
   const [result, setResult] = useState(null);
+  const [showRehab, setShowRehab] = useState(false);
+  const [showCompTracker, setShowCompTracker] = useState(false);
   const set = (k) => (v) => setF(prev => ({ ...prev, [k]: v }));
 
   const calculate = () => {
@@ -866,10 +1274,34 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults }) {
     if (netProfit >= s.greenProfit && roi >= s.greenROI) verdict = "green";
     else if (netProfit >= s.yellowProfit && roi >= s.yellowROI) verdict = "yellow";
     setResult({ buyClose, holdCost, interestCost, totalIn, sellClose, netProfit, roi, arvSpread, maxAllowable, arv, verdict });
+    if (session) {
+      supabase.from("deals").insert({
+        user_id: session.user.id,
+        address: f.purchasePrice ? `Flip — ${fmtD(purchase)}` : "Untitled Flip",
+        deal_type: "flip",
+        verdict,
+        net_profit: Math.round(netProfit),
+        roi: Math.round(roi * 100) / 100,
+        purchase_price: Math.round(purchase),
+        inputs: f,
+      }).select().single().then(res => { dbLog("deals.insert(flip)", res); if (onDealSaved) onDealSaved(); });
+    }
   };
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: result ? "1fr 1fr" : "1fr", gap: 16 }}>
+      {showRehab && (
+        <RehabEstimator
+          onClose={() => setShowRehab(false)}
+          onUseCost={(cost) => setF(prev => ({ ...prev, rehabCost: cost }))}
+        />
+      )}
+      {showCompTracker && (
+        <CompTrackerSheet
+          onClose={() => setShowCompTracker(false)}
+          onUseARV={(arv) => setF(prev => ({ ...prev, arvEstimate: arv }))}
+        />
+      )}
       <div>
         <Card>
           <SectionTitle>Acquisition</SectionTitle>
@@ -878,8 +1310,8 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults }) {
           <TwoCol>
             <Field label="Buy Closing Costs" value={f.closingCostsBuy} onChange={set("closingCostsBuy")} prefix="%" suffix="" />
             <Field label="Rehab / Repair Cost" value={f.rehabCost} onChange={set("rehabCost")}
-              proTip="Don't guess rehab. Pro has a room-by-room Rehab Estimator."
-              onScrollToPro={onScrollToPro} />
+              proTip="Don't guess rehab. Use the Rehab Estimator."
+              onScrollToPro={isPro ? () => setShowRehab(true) : onUpgrade} />
           </TwoCol>
         </Card>
         <Card>
@@ -901,8 +1333,8 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults }) {
         <Card>
           <SectionTitle>Exit</SectionTitle>
           <Field label="After Repair Value (ARV)" value={f.arvEstimate} onChange={set("arvEstimate")}
-            proTip="Pro has a Comparable Sales Tracker to build a confident ARV."
-            onScrollToPro={onScrollToPro} />
+            proTip="Build a confident ARV with the Comp Tracker."
+            onScrollToPro={isPro ? () => setShowCompTracker(true) : onUpgrade} />
           <div style={{ height: 8 }} />
           <Field label="Sell Closing Costs" value={f.closingCostsSell} onChange={set("closingCostsSell")} prefix="%" suffix="" />
         </Card>
@@ -957,6 +1389,2110 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults }) {
   );
 }
 
+// ─── RENT ANALYSIS WORKSHEET ────────────────────────────────────────────────
+function RentAnalysisWorksheet({ onClose, onUseRent }) {
+  const [subject, setSubject] = useState({ beds: "", baths: "", sqft: "", condition: "Average" });
+  const [comps, setComps] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editIdx, setEditIdx] = useState(null);
+  const blank = { address: "", beds: "", baths: "", sqft: "", rent: "", condition: "Average", distance: "" };
+  const [draft, setDraft] = useState(blank);
+  const d = (k) => (e) => setDraft(prev => ({ ...prev, [k]: e.target.value }));
+  const conditions = ["Excellent", "Good", "Average", "Fair", "Poor"];
+
+  const saveComp = () => {
+    if (!draft.rent) return;
+    if (editIdx !== null) {
+      setComps(prev => prev.map((c, i) => i === editIdx ? draft : c));
+      setEditIdx(null);
+    } else {
+      setComps(prev => [...prev, draft]);
+    }
+    setDraft(blank);
+    setShowAdd(false);
+  };
+
+  const rents = comps.map(c => num(c.rent)).filter(r => r > 0);
+  const avgRent = rents.length > 0 ? rents.reduce((a, b) => a + b, 0) / rents.length : 0;
+  const lowRent = rents.length > 0 ? Math.min(...rents) : 0;
+  const highRent = rents.length > 0 ? Math.max(...rents) : 0;
+  const midRent = rents.length > 0 ? Math.round((lowRent + highRent) / 2) : 0;
+  const recommended = Math.round(avgRent);
+
+  const ol = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
+  const bx = { background: C.white, borderRadius: 16, width: "100%", maxWidth: 600, padding: "28px", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" };
+  const inp = { width: "100%", padding: "10px 12px", background: C.inputBg, border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 14, color: C.text, fontFamily: "'DM Sans', sans-serif", outline: "none", boxSizing: "border-box" };
+  const lbl = { display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 4 };
+  const row2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 };
+
+  return (
+    <div style={ol}>
+      <div style={bx} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>Rent Analysis Worksheet</div>
+          <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}>&#10005;</button>
+        </div>
+
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Subject Property</div>
+        <div style={{ ...row2, marginBottom: 6 }}>
+          <div><label style={lbl}>Beds</label><input style={inp} value={subject.beds} onChange={e => setSubject(p => ({ ...p, beds: e.target.value }))} placeholder="3" /></div>
+          <div><label style={lbl}>Baths</label><input style={inp} value={subject.baths} onChange={e => setSubject(p => ({ ...p, baths: e.target.value }))} placeholder="2" /></div>
+        </div>
+        <div style={{ ...row2, marginBottom: 16 }}>
+          <div><label style={lbl}>Sq Ft</label><input style={inp} value={subject.sqft} onChange={e => setSubject(p => ({ ...p, sqft: e.target.value }))} placeholder="1,200" /></div>
+          <div><label style={lbl}>Condition</label>
+            <select style={inp} value={subject.condition} onChange={e => setSubject(p => ({ ...p, condition: e.target.value }))}>
+              {conditions.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ height: 1, background: C.border, margin: "16px 0" }} />
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Comparable Rentals ({comps.length}/4)</div>
+          {comps.length < 4 && <button onClick={() => { setDraft(blank); setEditIdx(null); setShowAdd(true); }} style={{ background: C.green, border: "none", borderRadius: 6, padding: "6px 14px", color: C.white, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>+ Add Comp</button>}
+        </div>
+
+        {comps.length === 0 && <div style={{ background: C.bg, border: `1.5px dashed ${C.border}`, borderRadius: 10, padding: "28px 16px", textAlign: "center", fontSize: 13, color: C.muted, marginBottom: 16 }}>Add comparable rentals to analyze market rent.</div>}
+
+        {comps.map((c, i) => (
+          <div key={i} style={{ background: C.bg, borderRadius: 10, padding: "12px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{c.address || `Comp ${i + 1}`}</div>
+              <div style={{ fontSize: 12, color: C.muted }}>{c.beds}bd / {c.baths}ba / {num(c.sqft).toLocaleString()} sqft — {fmtD(num(c.rent))}/mo</div>
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button onClick={() => { setDraft(c); setEditIdx(i); setShowAdd(true); }} style={{ background: "none", border: "none", fontSize: 11, fontWeight: 600, color: C.mutedLight, cursor: "pointer" }}>Edit</button>
+              <button onClick={() => setComps(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", fontSize: 11, fontWeight: 600, color: C.red, cursor: "pointer" }}>Remove</button>
+            </div>
+          </div>
+        ))}
+
+        {showAdd && (
+          <div style={{ background: C.bg, borderRadius: 12, padding: 16, marginBottom: 12, border: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10 }}>{editIdx !== null ? "Edit" : "Add"} Comparable Rental</div>
+            <div style={{ marginBottom: 6 }}><label style={lbl}>Address</label><input style={inp} value={draft.address} onChange={d("address")} placeholder="123 Main St" /></div>
+            <div style={{ ...row2, marginBottom: 6 }}>
+              <div><label style={lbl}>Beds</label><input style={inp} value={draft.beds} onChange={d("beds")} placeholder="3" /></div>
+              <div><label style={lbl}>Baths</label><input style={inp} value={draft.baths} onChange={d("baths")} placeholder="2" /></div>
+            </div>
+            <div style={{ ...row2, marginBottom: 6 }}>
+              <div><label style={lbl}>Sq Ft</label><input style={inp} value={draft.sqft} onChange={d("sqft")} placeholder="1,200" /></div>
+              <div><label style={lbl}>Monthly Rent ($)</label><input style={inp} value={draft.rent} onChange={d("rent")} placeholder="1,500" /></div>
+            </div>
+            <div style={{ ...row2, marginBottom: 10 }}>
+              <div><label style={lbl}>Condition</label>
+                <select style={inp} value={draft.condition} onChange={d("condition")}>
+                  {conditions.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div><label style={lbl}>Distance (mi)</label><input style={inp} value={draft.distance} onChange={d("distance")} placeholder="0.5" /></div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={saveComp} style={{ background: C.green, border: "none", borderRadius: 8, padding: "10px 20px", color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>{editIdx !== null ? "Update" : "Add"}</button>
+              <button onClick={() => { setShowAdd(false); setEditIdx(null); }} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 600, color: C.muted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {rents.length > 0 && (
+          <>
+            <div style={{ height: 1, background: C.border, margin: "16px 0" }} />
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>Market Rent Summary</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+              {[["Low", lowRent], ["Mid", midRent], ["High", highRent]].map(([l, v]) => (
+                <div key={l} style={{ background: C.bg, borderRadius: 10, padding: "14px 12px", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, marginBottom: 4 }}>{l}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{fmtD(v)}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: C.greenLight, borderRadius: 10, padding: "16px", textAlign: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.greenDark, marginBottom: 4 }}>Average Market Rent</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: C.greenDark }}>{fmtD(recommended)}<span style={{ fontSize: 14, fontWeight: 600 }}>/mo</span></div>
+            </div>
+            {onUseRent && (
+              <button onClick={() => onUseRent(String(recommended))} style={{ width: "100%", padding: "14px", background: C.green, border: "none", borderRadius: 10, color: C.white, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)" }}>
+                Use {fmtD(recommended)} as Monthly Rent
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── COMP TRACKER / ARV SHEET ───────────────────────────────────────────────
+function CompTrackerSheet({ onClose, onUseARV }) {
+  const [subject, setSubject] = useState({ address: "", sqft: "", beds: "", baths: "", condition: "Average" });
+  const [comps, setComps] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editIdx, setEditIdx] = useState(null);
+  const blank = { address: "", salePrice: "", sqft: "", beds: "", baths: "", condition: "Average", saleDate: "", distance: "" };
+  const [draft, setDraft] = useState(blank);
+  const d = (k) => (e) => setDraft(prev => ({ ...prev, [k]: e.target.value }));
+  const conditions = ["Excellent", "Good", "Average", "Fair", "Poor"];
+  const condAdj = { Excellent: 1.1, Good: 1.05, Average: 1, Fair: 0.95, Poor: 0.9 };
+
+  const saveComp = () => {
+    if (!draft.salePrice) return;
+    if (editIdx !== null) {
+      setComps(prev => prev.map((c, i) => i === editIdx ? draft : c));
+      setEditIdx(null);
+    } else {
+      setComps(prev => [...prev, draft]);
+    }
+    setDraft(blank);
+    setShowAdd(false);
+  };
+
+  const adjustedComps = comps.map(c => {
+    const ppsf = num(c.sqft) > 0 ? num(c.salePrice) / num(c.sqft) : 0;
+    const subjectCond = condAdj[subject.condition] || 1;
+    const compCond = condAdj[c.condition] || 1;
+    const adjFactor = subjectCond / compCond;
+    const adjPpsf = ppsf * adjFactor;
+    return { ...c, ppsf, adjPpsf };
+  });
+
+  const validComps = adjustedComps.filter(c => c.adjPpsf > 0);
+  const avgAdjPpsf = validComps.length > 0 ? validComps.reduce((s, c) => s + c.adjPpsf, 0) / validComps.length : 0;
+  const subSqft = num(subject.sqft);
+  const estimatedARV = subSqft > 0 && avgAdjPpsf > 0 ? Math.round(avgAdjPpsf * subSqft) : 0;
+  const lowARV = validComps.length > 0 ? Math.round(Math.min(...validComps.map(c => c.adjPpsf)) * subSqft) : 0;
+  const highARV = validComps.length > 0 ? Math.round(Math.max(...validComps.map(c => c.adjPpsf)) * subSqft) : 0;
+
+  const ol = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
+  const bx = { background: C.white, borderRadius: 16, width: "100%", maxWidth: 640, padding: "28px", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" };
+  const inp = { width: "100%", padding: "10px 12px", background: C.inputBg, border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 14, color: C.text, fontFamily: "'DM Sans', sans-serif", outline: "none", boxSizing: "border-box" };
+  const lbl = { display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 4 };
+  const row2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 };
+
+  return (
+    <div style={ol}>
+      <div style={bx} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>Comp Tracker / ARV Sheet</div>
+          <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}>&#10005;</button>
+        </div>
+
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Subject Property</div>
+        <div style={{ marginBottom: 6 }}><label style={lbl}>Address</label><input style={inp} value={subject.address} onChange={e => setSubject(p => ({ ...p, address: e.target.value }))} placeholder="456 Elm St" /></div>
+        <div style={{ ...row2, marginBottom: 6 }}>
+          <div><label style={lbl}>Sq Ft</label><input style={inp} value={subject.sqft} onChange={e => setSubject(p => ({ ...p, sqft: e.target.value }))} placeholder="1,400" /></div>
+          <div><label style={lbl}>Condition</label>
+            <select style={inp} value={subject.condition} onChange={e => setSubject(p => ({ ...p, condition: e.target.value }))}>
+              {conditions.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ ...row2, marginBottom: 16 }}>
+          <div><label style={lbl}>Beds</label><input style={inp} value={subject.beds} onChange={e => setSubject(p => ({ ...p, beds: e.target.value }))} placeholder="3" /></div>
+          <div><label style={lbl}>Baths</label><input style={inp} value={subject.baths} onChange={e => setSubject(p => ({ ...p, baths: e.target.value }))} placeholder="2" /></div>
+        </div>
+
+        <div style={{ height: 1, background: C.border, margin: "16px 0" }} />
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Comparable Sales ({comps.length}/5)</div>
+          {comps.length < 5 && <button onClick={() => { setDraft(blank); setEditIdx(null); setShowAdd(true); }} style={{ background: C.green, border: "none", borderRadius: 6, padding: "6px 14px", color: C.white, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>+ Add Comp</button>}
+        </div>
+
+        {comps.length === 0 && <div style={{ background: C.bg, border: `1.5px dashed ${C.border}`, borderRadius: 10, padding: "28px 16px", textAlign: "center", fontSize: 13, color: C.muted, marginBottom: 16 }}>Add comparable sales to estimate ARV.</div>}
+
+        {adjustedComps.map((c, i) => (
+          <div key={i} style={{ background: C.bg, borderRadius: 10, padding: "12px 16px", marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{c.address || `Comp ${i + 1}`}</div>
+                <div style={{ fontSize: 12, color: C.muted }}>{c.beds}bd / {c.baths}ba / {num(c.sqft).toLocaleString()} sqft — {fmtD(num(c.salePrice))}</div>
+              </div>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button onClick={() => { setDraft(comps[i]); setEditIdx(i); setShowAdd(true); }} style={{ background: "none", border: "none", fontSize: 11, fontWeight: 600, color: C.mutedLight, cursor: "pointer" }}>Edit</button>
+                <button onClick={() => setComps(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", fontSize: 11, fontWeight: 600, color: C.red, cursor: "pointer" }}>Remove</button>
+              </div>
+            </div>
+            {c.adjPpsf > 0 && (
+              <div style={{ fontSize: 11, fontWeight: 600, color: C.greenDark, marginTop: 4 }}>
+                ${c.ppsf.toFixed(2)}/sqft → Adj: ${c.adjPpsf.toFixed(2)}/sqft
+              </div>
+            )}
+          </div>
+        ))}
+
+        {showAdd && (
+          <div style={{ background: C.bg, borderRadius: 12, padding: 16, marginBottom: 12, border: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10 }}>{editIdx !== null ? "Edit" : "Add"} Comparable Sale</div>
+            <div style={{ marginBottom: 6 }}><label style={lbl}>Address</label><input style={inp} value={draft.address} onChange={d("address")} placeholder="789 Oak Ave" /></div>
+            <div style={{ ...row2, marginBottom: 6 }}>
+              <div><label style={lbl}>Sale Price ($)</label><input style={inp} value={draft.salePrice} onChange={d("salePrice")} placeholder="285,000" /></div>
+              <div><label style={lbl}>Sq Ft</label><input style={inp} value={draft.sqft} onChange={d("sqft")} placeholder="1,350" /></div>
+            </div>
+            <div style={{ ...row2, marginBottom: 6 }}>
+              <div><label style={lbl}>Beds</label><input style={inp} value={draft.beds} onChange={d("beds")} placeholder="3" /></div>
+              <div><label style={lbl}>Baths</label><input style={inp} value={draft.baths} onChange={d("baths")} placeholder="2" /></div>
+            </div>
+            <div style={{ ...row2, marginBottom: 6 }}>
+              <div><label style={lbl}>Condition</label>
+                <select style={inp} value={draft.condition} onChange={d("condition")}>
+                  {conditions.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div><label style={lbl}>Sale Date</label><input style={inp} type="date" value={draft.saleDate} onChange={d("saleDate")} /></div>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <label style={lbl}>Distance (mi)</label><input style={{ ...inp, maxWidth: "50%" }} value={draft.distance} onChange={d("distance")} placeholder="0.3" />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={saveComp} style={{ background: C.green, border: "none", borderRadius: 8, padding: "10px 20px", color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>{editIdx !== null ? "Update" : "Add"}</button>
+              <button onClick={() => { setShowAdd(false); setEditIdx(null); }} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 600, color: C.muted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {estimatedARV > 0 && (
+          <>
+            <div style={{ height: 1, background: C.border, margin: "16px 0" }} />
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>ARV Summary</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+              {[["Low", lowARV], ["Estimated", estimatedARV], ["High", highARV]].map(([l, v]) => (
+                <div key={l} style={{ background: l === "Estimated" ? C.greenLight : C.bg, borderRadius: 10, padding: "14px 12px", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: l === "Estimated" ? C.greenDark : C.muted, marginBottom: 4 }}>{l}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: l === "Estimated" ? C.greenDark : C.text }}>{fmtD(v)}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: C.bg, borderRadius: 10, padding: "10px 16px", marginBottom: 12, fontSize: 12, color: C.muted }}>
+              Avg Adjusted $/sqft: <strong>${avgAdjPpsf.toFixed(2)}</strong> &middot; Confidence Range: {fmtD(lowARV)} &ndash; {fmtD(highARV)}
+            </div>
+            {onUseARV && (
+              <button onClick={() => onUseARV(String(estimatedARV))} style={{ width: "100%", padding: "14px", background: C.green, border: "none", borderRadius: 10, color: C.white, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)" }}>
+                Use {fmtD(estimatedARV)} as ARV
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── PROPERTY TOOLS ──────────────────────────────────────────────────────────
+
+const _modalOverlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
+const _modalBox = { background: C.white, borderRadius: 16, width: "100%", maxWidth: 520, padding: "28px", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" };
+const _modalHeader = (title, onClose) => (
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+    <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{title}</div>
+    <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}>&#10005;</button>
+  </div>
+);
+const _modalInput = { width: "100%", padding: "10px 12px", background: C.inputBg, border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 14, color: C.text, fontFamily: "'DM Sans', sans-serif", outline: "none", boxSizing: "border-box" };
+const _modalLabel = { display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 4 };
+const _modalSubmit = (label) => ({ width: "100%", padding: "14px", background: C.green, border: "none", borderRadius: 10, color: C.white, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)", marginTop: 16 });
+const _addBtn = { background: C.green, border: "none", borderRadius: 8, padding: "10px 20px", color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)" };
+const _editBtn = { background: "none", border: "none", fontSize: 11, fontWeight: 600, color: C.mutedLight, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "2px 6px" };
+const _emptyState = (msg, btnLabel, onClick) => (
+  <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
+    <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>&#128203;</div>
+    <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, marginBottom: 16, lineHeight: 1.5 }}>{msg}</div>
+    <button onClick={onClick} style={_addBtn}>{btnLabel}</button>
+  </div>
+);
+
+function CashFlowTracker({ session }) {
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [modal, setModal] = useState(null); // null | { editing?: index }
+  const [form, setForm] = useState({ month: "", property: "", projected: "", actual: "" });
+  const [selectedProperty, setSelectedProperty] = useState("all");
+
+  useEffect(() => {
+    if (!session) return;
+    supabase.from("cash_flow_entries").select("*").order("created_at", { ascending: false })
+      .then(res => { dbLog("cash_flow_entries.select", res); setRecords((res.data || []).map(r => ({ ...r, month: r.month, property: r.property_id || "", projected: r.projected_cash_flow || 0, actual: (r.actual_rent || 0) - (r.actual_expenses || 0) }))); setLoading(false); });
+  }, [session]);
+
+  const openAdd = () => { setForm({ month: "", property: "", projected: "", actual: "" }); setModal({}); };
+  const openEdit = (i) => { const r = records[i]; setForm({ month: r.month, property: r.property, projected: String(r.projected), actual: String(r.actual) }); setModal({ editing: i }); };
+  const save = async () => {
+    const entry = { month: form.month, property: form.property, projected: num(form.projected), actual: num(form.actual) };
+    if (!entry.month || !entry.property) return;
+    setSaving(true);
+    if (modal.editing !== undefined) {
+      const rec = records[modal.editing];
+      if (rec.id) {
+        const res = await supabase.from("cash_flow_entries").update({ month: entry.month, property_id: entry.property, projected_cash_flow: entry.projected, actual_rent: entry.actual, actual_expenses: 0 }).eq("id", rec.id).select().single();
+        dbLog("cash_flow_entries.update", res);
+      }
+      setRecords(prev => prev.map((r, i) => i === modal.editing ? { ...r, ...entry } : r));
+    } else {
+      const res = await supabase.from("cash_flow_entries").insert({ user_id: session.user.id, month: entry.month, property_id: entry.property, projected_cash_flow: entry.projected, actual_rent: entry.actual, actual_expenses: 0 }).select().single();
+      dbLog("cash_flow_entries.insert", res);
+      setRecords(prev => [{ ...entry, id: res.data?.id }, ...prev]);
+    }
+    setSaving(false);
+    setModal(null);
+  };
+
+  const properties = ["all", ...[...new Set(records.map(r => r.property))]];
+  const filtered = selectedProperty === "all" ? records : records.filter(r => r.property === selectedProperty);
+  const months = [...new Set(records.map(r => r.month))];
+  const monthlyTotals = months.map(m => {
+    const rows = filtered.filter(r => r.month === m);
+    return { month: m, projected: rows.reduce((s, r) => s + r.projected, 0), actual: rows.reduce((s, r) => s + r.actual, 0) };
+  });
+  const totalProjected = monthlyTotals.reduce((s, m) => s + m.projected, 0);
+  const totalActual = monthlyTotals.reduce((s, m) => s + m.actual, 0);
+
+  const rowStyle = { display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 60px", padding: "12px 16px", alignItems: "center" };
+  const headerStyle = { fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" };
+
+  if (loading) return <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading cash flow data...</div>;
+  if (records.length === 0 && !modal) return _emptyState("No cash flow records yet. Add your first month to start tracking.", "+ Add Month", openAdd);
+
+  return (
+    <div>
+      {modal && (
+        <div style={_modalOverlay}><div style={_modalBox}>
+          {_modalHeader(modal.editing !== undefined ? "Edit Record" : "Add Cash Flow Record", () => setModal(null))}
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Month</label><input value={form.month} onChange={e => setForm(p => ({ ...p, month: e.target.value }))} placeholder="e.g. Jan" style={_modalInput} /></div>
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Property</label><input value={form.property} onChange={e => setForm(p => ({ ...p, property: e.target.value }))} placeholder="e.g. 123 Oak St" style={_modalInput} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Projected</label><input type="number" value={form.projected} onChange={e => setForm(p => ({ ...p, projected: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Actual</label><input type="number" value={form.actual} onChange={e => setForm(p => ({ ...p, actual: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+          </div>
+          <button onClick={save} disabled={saving} style={{ ..._modalSubmit(), opacity: saving ? 0.7 : 1 }}>{saving ? "Saving..." : modal.editing !== undefined ? "Save Changes" : "Add Record"}</button>
+        </div></div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <select value={selectedProperty} onChange={e => setSelectedProperty(e.target.value)} style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontWeight: 600, color: C.text, background: C.white, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
+          {properties.map(p => <option key={p} value={p}>{p === "all" ? "All Properties" : p}</option>)}
+        </select>
+        <button onClick={openAdd} style={_addBtn}>+ Add Month</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <DashStatCard label="Total Projected" value={fmtD(totalProjected)} />
+        <DashStatCard label="Total Actual" value={fmtD(totalActual)} />
+        {monthlyTotals.length > 0 && <DashStatCard label="Best Month" value={monthlyTotals.reduce((b, m) => m.actual > b.actual ? m : b).month} sub={` (${fmtD(monthlyTotals.reduce((b, m) => m.actual > b.actual ? m : b).actual)})`} />}
+        {monthlyTotals.length > 0 && <DashStatCard label="Worst Month" value={monthlyTotals.reduce((w, m) => m.actual < w.actual ? m : w).month} sub={` (${fmtD(monthlyTotals.reduce((w, m) => m.actual < w.actual ? m : w).actual)})`} />}
+      </div>
+
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+        <div style={{ ...rowStyle, borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+          <span style={headerStyle}>Month</span><span style={headerStyle}>Projected</span><span style={headerStyle}>Actual</span><span style={{ ...headerStyle, textAlign: "right" }}>Variance</span><span />
+        </div>
+        {monthlyTotals.map((m, i) => {
+          const variance = m.actual - m.projected;
+          const idx = records.findIndex(r => r.month === m.month && (selectedProperty === "all" || r.property === selectedProperty));
+          return (
+            <div key={m.month} style={{ ...rowStyle, borderBottom: i < monthlyTotals.length - 1 ? `1px solid ${C.border}` : "none" }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{m.month}</span>
+              <span style={{ fontSize: 13, color: C.muted }}>{fmtD(m.projected)}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{fmtD(m.actual)}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: variance >= 0 ? C.green : C.red, textAlign: "right" }}>{variance >= 0 ? "+" : ""}{fmtD(variance)}</span>
+              <span style={{ textAlign: "right" }}>{idx >= 0 && <button onClick={() => openEdit(idx)} style={_editBtn}>Edit</button>}</span>
+            </div>
+          );
+        })}
+        {monthlyTotals.length > 0 && (
+          <div style={{ ...rowStyle, borderTop: `2px solid ${C.border}`, background: C.bg }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Total</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.muted }}>{fmtD(totalProjected)}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{fmtD(totalActual)}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: totalActual - totalProjected >= 0 ? C.green : C.red, textAlign: "right" }}>{totalActual - totalProjected >= 0 ? "+" : ""}{fmtD(totalActual - totalProjected)}</span>
+            <span />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TenantTracker({ session }) {
+  const STATUSES = ["current", "notice_given", "vacating", "past_tenant"];
+  const [tenants, setTenants] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [modal, setModal] = useState(null);
+  const [payModal, setPayModal] = useState(null);
+  const [form, setForm] = useState({ name: "", property: "", unit: "", rent: "", status: "current", leaseEnd: "", phone: "" });
+  const [payForm, setPayForm] = useState({ amount: "", dueDate: "", paidDate: "", month: "", notes: "" });
+
+  useEffect(() => {
+    if (!session) return;
+    Promise.all([
+      supabase.from("tenants").select("*").order("created_at", { ascending: false }),
+      supabase.from("payment_history").select("*").order("due_date", { ascending: false }),
+    ]).then(([tRes, pRes]) => {
+      dbLog("tenants.select", tRes);
+      dbLog("payment_history.select", pRes);
+      setTenants((tRes.data || []).map(t => ({ id: t.id, name: t.name, property: t.property_id || "", unit: t.unit_number || "", rent: t.monthly_rent || 0, status: t.status || "current", leaseEnd: t.lease_end || "", phone: t.phone || "", leaseId: t.lease_id || null })));
+      setPayments(pRes.data || []);
+      setLoading(false);
+    });
+  }, [session]);
+
+  const openAdd = () => { setForm({ name: "", property: "", unit: "", rent: "", status: "current", leaseEnd: "", phone: "" }); setModal({}); };
+  const openEdit = (id) => { const t = tenants.find(x => x.id === id); setForm({ name: t.name, property: t.property, unit: t.unit, rent: String(t.rent), status: t.status, leaseEnd: t.leaseEnd, phone: t.phone }); setModal({ editing: id }); };
+  const save = async () => {
+    if (!form.name || !form.property) return;
+    console.log("[TENANT SAVE] session:", session ? "exists" : "NULL", "user.id:", session?.user?.id || "NONE");
+    console.log("[TENANT SAVE] auth.uid check:", (await supabase.auth.getUser()).data?.user?.id || "NO AUTH USER");
+    setSaving(true);
+    const entry = { name: form.name, property: form.property, unit: form.unit, rent: num(form.rent), status: form.status, leaseEnd: form.leaseEnd, phone: form.phone };
+    if (modal.editing !== undefined) {
+      const res = await supabase.from("tenants").update({ name: entry.name, property_id: entry.property, unit_number: entry.unit, monthly_rent: entry.rent, status: entry.status, lease_end: entry.leaseEnd || null, phone: entry.phone }).eq("id", modal.editing).select().single();
+      dbLog("tenants.update", res);
+      setTenants(prev => prev.map(t => t.id === modal.editing ? { ...t, ...entry } : t));
+    } else {
+      const payload = { user_id: session.user.id, name: entry.name, property_id: entry.property, unit_number: entry.unit, monthly_rent: entry.rent, status: entry.status, lease_end: entry.leaseEnd || null, phone: entry.phone };
+      console.log("[TENANT SAVE] insert payload:", JSON.stringify(payload));
+      const res = await supabase.from("tenants").insert(payload).select().single();
+      dbLog("tenants.insert", res);
+      setTenants(prev => [{ ...entry, id: res.data?.id || Date.now() }, ...prev]);
+    }
+    setSaving(false);
+    setModal(null);
+  };
+
+  const openPayment = (tenantId) => { setPayForm({ amount: "", dueDate: "", paidDate: "", month: "", notes: "" }); setPayModal({ tenantId }); };
+  const savePayment = async () => {
+    if (!payForm.dueDate || !payForm.amount) return;
+    setSaving(true);
+    const t = tenants.find(x => x.id === payModal.tenantId);
+    const res = await supabase.from("payment_history").insert({ user_id: session.user.id, tenant_id: payModal.tenantId, property_id: t?.property || "", amount: num(payForm.amount), due_date: payForm.dueDate, paid_date: payForm.paidDate || null, month: payForm.month, notes: payForm.notes }).select().single();
+    dbLog("payment_history.insert", res);
+    if (res.data) setPayments(prev => [res.data, ...prev]);
+    setSaving(false);
+    setPayModal(null);
+  };
+
+  const getPaymentStatus = (p) => {
+    if (!p.paid_date) return { label: "UNPAID", bg: C.redLight, color: C.red };
+    const due = new Date(p.due_date);
+    const paid = new Date(p.paid_date);
+    if (paid <= due) return { label: "ON TIME", bg: C.greenLight, color: C.greenDark };
+    const daysLate = Math.round((paid - due) / (24 * 60 * 60 * 1000));
+    return { label: `${daysLate}d LATE`, bg: C.yellowLight, color: C.yellowDark };
+  };
+
+  const activeFilter = filter === "active" ? tenants.filter(t => t.status !== "past_tenant") : filter === "all" ? tenants : tenants.filter(t => t.status === filter);
+  const filtered = activeFilter;
+  const currentCount = tenants.filter(t => t.status === "current").length;
+  const latePaymentCount = payments.filter(p => !p.paid_date && new Date(p.due_date) < new Date()).length;
+
+  const statusBadge = (status) => {
+    const cfg = {
+      current: { bg: C.greenLight, color: C.greenDark, label: "CURRENT" },
+      notice_given: { bg: C.yellowLight, color: C.yellowDark, label: "NOTICE GIVEN" },
+      vacating: { bg: "#FEF3C7", color: "#92400E", label: "VACATING" },
+      past_tenant: { bg: C.bg, color: C.mutedLight, label: "PAST TENANT" },
+    }[status] || { bg: C.bg, color: C.muted, label: status.toUpperCase() };
+    return <span style={{ background: cfg.bg, color: cfg.color, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, letterSpacing: "0.04em" }}>{cfg.label}</span>;
+  };
+
+  const statusLabel = (s) => ({ current: "Current", notice_given: "Notice Given", vacating: "Vacating", past_tenant: "Past Tenant" }[s] || s);
+
+  if (loading) return <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading tenants...</div>;
+  if (tenants.length === 0 && !modal) return _emptyState("No tenants added yet. Add your first tenant to get started.", "+ Add Tenant", openAdd);
+
+  return (
+    <div>
+      {modal && (
+        <div style={_modalOverlay}><div style={_modalBox}>
+          {_modalHeader(modal.editing !== undefined ? "Edit Tenant" : "Add Tenant", () => setModal(null))}
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Name</label><input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Full name" style={_modalInput} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Property</label><input value={form.property} onChange={e => setForm(p => ({ ...p, property: e.target.value }))} placeholder="123 Oak St" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Unit</label><input value={form.unit} onChange={e => setForm(p => ({ ...p, unit: e.target.value }))} placeholder="A" style={_modalInput} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Rent / Mo</label><input type="number" value={form.rent} onChange={e => setForm(p => ({ ...p, rent: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Status</label><select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} style={{ ..._modalInput, cursor: "pointer" }}>{STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}</select></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Lease End</label><input type="date" value={form.leaseEnd} onChange={e => setForm(p => ({ ...p, leaseEnd: e.target.value }))} style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Phone</label><input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="555-0101" style={_modalInput} /></div>
+          </div>
+          <button onClick={save} disabled={saving} style={{ ..._modalSubmit(), opacity: saving ? 0.7 : 1 }}>{saving ? "Saving..." : modal.editing !== undefined ? "Save Changes" : "Add Tenant"}</button>
+        </div></div>
+      )}
+
+      {payModal && (
+        <div style={_modalOverlay}><div style={_modalBox}>
+          {_modalHeader("Record Payment", () => setPayModal(null))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Amount</label><input type="number" value={payForm.amount} onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Month</label><input value={payForm.month} onChange={e => setPayForm(p => ({ ...p, month: e.target.value }))} placeholder="e.g. Mar 2026" style={_modalInput} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Due Date</label><input type="date" value={payForm.dueDate} onChange={e => setPayForm(p => ({ ...p, dueDate: e.target.value }))} style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Paid Date</label><input type="date" value={payForm.paidDate} onChange={e => setPayForm(p => ({ ...p, paidDate: e.target.value }))} style={_modalInput} /></div>
+          </div>
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Notes</label><input value={payForm.notes} onChange={e => setPayForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional" style={_modalInput} /></div>
+          <button onClick={savePayment} disabled={saving} style={{ ..._modalSubmit(), opacity: saving ? 0.7 : 1 }}>{saving ? "Saving..." : "Record Payment"}</button>
+        </div></div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {["all", "active", ...STATUSES].map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${filter === f ? C.green : C.border}`, background: filter === f ? C.greenLight : C.white, color: filter === f ? C.greenDark : C.muted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>{f === "all" ? "All" : f === "active" ? "Active" : statusLabel(f)}</button>
+          ))}
+        </div>
+        <button onClick={openAdd} style={_addBtn}>+ Add Tenant</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <DashStatCard label="Total Tenants" value={tenants.length} />
+        <DashStatCard label="Current" value={currentCount} />
+        <DashStatCard label="Unpaid Payments" value={latePaymentCount} />
+        <DashStatCard label="Monthly Rent Roll" value={fmtD(tenants.filter(t => t.status === "current").reduce((s, t) => s + t.rent, 0))} />
+      </div>
+
+      <div style={{ display: "grid", gap: 12 }}>
+        {filtered.map(t => {
+          const tenantPayments = payments.filter(p => p.tenant_id === t.id).slice(0, 4);
+          return (
+          <div key={t.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px", opacity: t.status === "past_tenant" ? 0.6 : 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{t.name}</div>
+                <div style={{ fontSize: 12, color: C.muted }}>{t.property} — Unit {t.unit}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button onClick={() => openPayment(t.id)} style={{ ..._editBtn, color: C.green }}>+ Payment</button>
+                <button onClick={() => openEdit(t.id)} style={_editBtn}>Edit</button>
+                {statusBadge(t.status)}
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Rent</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{fmtD(t.rent)}/mo</div></div>
+              <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Lease End</div><div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t.leaseEnd}</div></div>
+              <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Phone</div><div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t.phone}</div></div>
+            </div>
+            {tenantPayments.length > 0 && (
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Recent Payments</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {tenantPayments.map((p, i) => {
+                    const ps = getPaymentStatus(p);
+                    return (
+                    <div key={i} style={{ background: ps.bg, borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, color: ps.color }}>
+                      {p.month || p.due_date}: {p.amount > 0 ? fmtD(p.amount) : "—"} ({ps.label})
+                    </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FinancingTracker({ session }) {
+  const [loans, setLoans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({ property: "", lender: "", balance: "", rate: "", payment: "", type: "30yr Fixed", maturity: "" });
+
+  useEffect(() => {
+    if (!session) return;
+    supabase.from("loans").select("*").order("created_at", { ascending: false })
+      .then(res => { dbLog("loans.select", res); setLoans((res.data || []).map(l => ({ id: l.id, property: l.property_id || "", lender: l.lender || "", balance: l.current_balance || 0, rate: l.interest_rate || 0, payment: l.monthly_payment || 0, type: l.loan_type || "30yr Fixed", maturity: l.maturity_date || "" }))); setLoading(false); });
+  }, [session]);
+
+  const openAdd = () => { setForm({ property: "", lender: "", balance: "", rate: "", payment: "", type: "30yr Fixed", maturity: "" }); setModal({}); };
+  const openEdit = (id) => { const l = loans.find(x => x.id === id); setForm({ property: l.property, lender: l.lender, balance: String(l.balance), rate: String(l.rate), payment: String(l.payment), type: l.type, maturity: l.maturity }); setModal({ editing: id }); };
+  const save = async () => {
+    if (!form.property || !form.lender) return;
+    setSaving(true);
+    const entry = { property: form.property, lender: form.lender, balance: num(form.balance), rate: num(form.rate), payment: num(form.payment), type: form.type, maturity: form.maturity };
+    if (modal.editing !== undefined) {
+      const res = await supabase.from("loans").update({ property_id: entry.property, lender: entry.lender, current_balance: entry.balance, interest_rate: entry.rate, monthly_payment: entry.payment, loan_type: entry.type, maturity_date: entry.maturity || null }).eq("id", modal.editing).select().single();
+      dbLog("loans.update", res);
+      setLoans(prev => prev.map(l => l.id === modal.editing ? { ...l, ...entry } : l));
+    } else {
+      const res = await supabase.from("loans").insert({ user_id: session.user.id, property_id: entry.property, lender: entry.lender, current_balance: entry.balance, interest_rate: entry.rate, monthly_payment: entry.payment, loan_type: entry.type, maturity_date: entry.maturity || null }).select().single();
+      dbLog("loans.insert", res);
+      setLoans(prev => [{ ...entry, id: res.data?.id || Date.now() }, ...prev]);
+    }
+    setSaving(false);
+    setModal(null);
+  };
+
+  const totalBalance = loans.reduce((s, l) => s + l.balance, 0);
+  const totalPayment = loans.reduce((s, l) => s + l.payment, 0);
+  const avgRate = loans.length > 0 ? loans.reduce((s, l) => s + l.rate, 0) / loans.length : 0;
+  const balloonLoans = loans.filter(l => l.type.includes("Balloon"));
+  const nearBalloon = balloonLoans.filter(l => { const diff = new Date(l.maturity) - new Date(); return diff > 0 && diff < 365 * 24 * 60 * 60 * 1000; });
+  const criticalBalloon = balloonLoans.filter(l => { const diff = new Date(l.maturity) - new Date(); return diff > 0 && diff < 90 * 24 * 60 * 60 * 1000; });
+
+  if (loading) return <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading loans...</div>;
+  if (loans.length === 0 && !modal) return _emptyState("No loans added yet. Add your first loan to start tracking.", "+ Add Loan", openAdd);
+
+  return (
+    <div>
+      {modal && (
+        <div style={_modalOverlay}><div style={_modalBox}>
+          {_modalHeader(modal.editing !== undefined ? "Edit Loan" : "Add Loan", () => setModal(null))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Property</label><input value={form.property} onChange={e => setForm(p => ({ ...p, property: e.target.value }))} placeholder="123 Oak St" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Lender</label><input value={form.lender} onChange={e => setForm(p => ({ ...p, lender: e.target.value }))} placeholder="Chase Bank" style={_modalInput} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Balance</label><input type="number" value={form.balance} onChange={e => setForm(p => ({ ...p, balance: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Rate (%)</label><input type="number" value={form.rate} onChange={e => setForm(p => ({ ...p, rate: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Monthly Payment</label><input type="number" value={form.payment} onChange={e => setForm(p => ({ ...p, payment: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Loan Type</label><select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} style={{ ..._modalInput, cursor: "pointer" }}><option value="30yr Fixed">30yr Fixed</option><option value="15yr Fixed">15yr Fixed</option><option value="5yr Balloon">5yr Balloon</option><option value="10yr Balloon">10yr Balloon</option><option value="ARM">ARM</option></select></div>
+          </div>
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Maturity Date</label><input type="date" value={form.maturity} onChange={e => setForm(p => ({ ...p, maturity: e.target.value }))} style={_modalInput} /></div>
+          <button onClick={save} disabled={saving} style={{ ..._modalSubmit(), opacity: saving ? 0.7 : 1 }}>{saving ? "Saving..." : modal.editing !== undefined ? "Save Changes" : "Add Loan"}</button>
+        </div></div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+        <button onClick={openAdd} style={_addBtn}>+ Add Loan</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <DashStatCard label="Total Debt" value={fmtD(totalBalance)} />
+        <DashStatCard label="Monthly Payments" value={fmtD(totalPayment)} />
+        <DashStatCard label="Avg Rate" value={fmtP(avgRate)} />
+        <DashStatCard label="Active Loans" value={loans.length} />
+      </div>
+
+      {criticalBalloon.length > 0 && (
+        <div style={{ background: C.redLight, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 18 }}>&#9888;&#65039;</span>
+          <div style={{ fontSize: 13, color: C.red, lineHeight: 1.5, fontWeight: 600 }}>{criticalBalloon.length} balloon loan{criticalBalloon.length > 1 ? "s" : ""} maturing within 90 days: {criticalBalloon.map(l => l.property).join(", ")}</div>
+        </div>
+      )}
+      {nearBalloon.length > 0 && criticalBalloon.length < nearBalloon.length && (
+        <div style={{ background: C.yellowLight, border: `1px solid ${C.yellow}44`, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: 18 }}>&#9888;&#65039;</span>
+          <div style={{ fontSize: 13, color: C.yellowDark, lineHeight: 1.5, fontWeight: 600 }}>{nearBalloon.length - criticalBalloon.length} balloon loan{nearBalloon.length - criticalBalloon.length > 1 ? "s" : ""} maturing within 12 months: {nearBalloon.filter(l => !criticalBalloon.includes(l)).map(l => l.property).join(", ")}</div>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 12 }}>
+        {loans.map(l => {
+          const isBalloon = l.type.includes("Balloon");
+          const monthsLeft = l.maturity ? Math.max(0, Math.round((new Date(l.maturity) - new Date()) / (30 * 24 * 60 * 60 * 1000))) : 0;
+          return (
+            <div key={l.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{l.property}</div>
+                  <div style={{ fontSize: 12, color: C.muted }}>{l.lender}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button onClick={() => openEdit(l.id)} style={_editBtn}>Edit</button>
+                  <span style={{ background: isBalloon ? C.yellowLight : C.greenLight, color: isBalloon ? C.yellowDark : C.greenDark, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, letterSpacing: "0.04em" }}>{l.type.toUpperCase()}</span>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+                <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Balance</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{fmtD(l.balance)}</div></div>
+                <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Rate</div><div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{l.rate}%</div></div>
+                <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Payment</div><div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{fmtD(l.payment)}/mo</div></div>
+                <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Maturity</div><div style={{ fontSize: 14, fontWeight: 600, color: isBalloon && monthsLeft <= 3 ? C.red : isBalloon && monthsLeft <= 12 ? C.yellowDark : C.text }}>{l.maturity}{isBalloon && monthsLeft <= 12 ? ` (${monthsLeft}mo)` : ""}</div></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {loans.length > 0 && (
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 18px", marginTop: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Total Balance</div><div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{fmtD(totalBalance)}</div></div>
+            <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Total Payment</div><div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{fmtD(totalPayment)}/mo</div></div>
+            <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Avg Rate</div><div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{fmtP(avgRate)}</div></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeaseRenewalTracker({ session }) {
+  const [leases, setLeases] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({ property: "", unit: "", tenant: "", start: "", end: "", rent: "" });
+
+  useEffect(() => {
+    if (!session) return;
+    // Load leases and tenants, auto-populate lease renewals for tenants with lease_end within 90 days
+    Promise.all([
+      supabase.from("leases").select("*").order("created_at", { ascending: false }),
+      supabase.from("tenants").select("*"),
+    ]).then(async ([leaseRes, tenantRes]) => {
+      dbLog("leases.select", leaseRes);
+      dbLog("tenants.select(for leases)", tenantRes);
+      const existingLeases = leaseRes.data || [];
+      const allTenants = tenantRes.data || [];
+      const now = new Date();
+      const in90 = 90 * 24 * 60 * 60 * 1000;
+      // Find tenants with lease_end within 90 days that don't already have a matching lease entry
+      const needsRenewal = allTenants.filter(t => {
+        if (!t.lease_end || t.status === "past_tenant") return false;
+        const daysUntil = new Date(t.lease_end) - now;
+        if (daysUntil <= 0 || daysUntil > in90) return false;
+        // Check if a lease already exists for this tenant + property + end date
+        return !existingLeases.some(l => l.tenant_name === t.name && l.property_id === t.property_id && l.lease_end === t.lease_end);
+      });
+      // Auto-create lease renewal entries for these tenants
+      if (needsRenewal.length > 0) {
+        const inserts = needsRenewal.map(t => ({ user_id: session.user.id, property_id: t.property_id, tenant_name: t.name, lease_end: t.lease_end, proposed_rent: t.monthly_rent || 0, notes: t.unit_number ? `Unit ${t.unit_number}` : null }));
+        const res = await supabase.from("leases").insert(inserts).select();
+        dbLog("leases.auto-insert", res);
+        if (res.data) existingLeases.push(...res.data);
+      }
+      setLeases(existingLeases.map(l => ({ id: l.id, property: l.property_id || "", unit: (l.notes || "").replace("Unit ", ""), tenant: l.tenant_name || "", start: l.lease_start || "", end: l.lease_end || "", rent: l.proposed_rent || 0 })));
+      setLoading(false);
+    });
+  }, [session]);
+
+  const openAdd = () => { setForm({ property: "", unit: "", tenant: "", start: "", end: "", rent: "" }); setModal({}); };
+  const openEdit = (id) => { const l = leases.find(x => x.id === id); setForm({ property: l.property, unit: l.unit, tenant: l.tenant, start: l.start, end: l.end, rent: String(l.rent) }); setModal({ editing: id }); };
+  const save = async () => {
+    if (!form.tenant || !form.property || !form.end) return;
+    setSaving(true);
+    const entry = { property: form.property, unit: form.unit, tenant: form.tenant, start: form.start, end: form.end, rent: num(form.rent) };
+    if (modal.editing !== undefined) {
+      const res = await supabase.from("leases").update({ property_id: entry.property, tenant_name: entry.tenant, lease_start: entry.start || null, lease_end: entry.end, proposed_rent: entry.rent, notes: entry.unit ? `Unit ${entry.unit}` : null }).eq("id", modal.editing).select().single();
+      dbLog("leases.update", res);
+      setLeases(prev => prev.map(l => l.id === modal.editing ? { ...l, ...entry } : l));
+    } else {
+      const res = await supabase.from("leases").insert({ user_id: session.user.id, property_id: entry.property, tenant_name: entry.tenant, lease_start: entry.start || null, lease_end: entry.end, proposed_rent: entry.rent, notes: entry.unit ? `Unit ${entry.unit}` : null }).select().single();
+      dbLog("leases.insert", res);
+      setLeases(prev => [{ ...entry, id: res.data?.id || Date.now() }, ...prev]);
+    }
+    setSaving(false);
+    setModal(null);
+  };
+
+  const getUrgency = (lease) => {
+    const daysLeft = Math.round((new Date(lease.end) - new Date()) / (24 * 60 * 60 * 1000));
+    if (daysLeft <= 30) return { color: C.red, bg: C.redLight, label: "URGENT", days: daysLeft };
+    if (daysLeft <= 90) return { color: C.yellow, bg: C.yellowLight, label: "SOON", days: daysLeft };
+    return { color: C.greenDark, bg: C.greenLight, label: "OK", days: daysLeft };
+  };
+
+  const sorted = [...leases].sort((a, b) => new Date(a.end) - new Date(b.end));
+  const q1 = sorted.filter(l => { const d = new Date(l.end); return d.getMonth() < 3; });
+  const q2 = sorted.filter(l => { const d = new Date(l.end); return d.getMonth() >= 3 && d.getMonth() < 6; });
+  const q3 = sorted.filter(l => { const d = new Date(l.end); return d.getMonth() >= 6 && d.getMonth() < 9; });
+  const q4 = sorted.filter(l => { const d = new Date(l.end); return d.getMonth() >= 9; });
+  const expiring30 = sorted.filter(l => { const u = getUrgency(l); return u.days <= 30 && u.days > 0; }).length;
+  const expiring90 = sorted.filter(l => { const u = getUrgency(l); return u.days <= 90 && u.days > 0; }).length;
+
+  if (loading) return <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading leases...</div>;
+  if (leases.length === 0 && !modal) return _emptyState("No leases added yet. Add your first lease to start tracking renewals.", "+ Add Lease", openAdd);
+
+  return (
+    <div>
+      {modal && (
+        <div style={_modalOverlay}><div style={_modalBox}>
+          {_modalHeader(modal.editing !== undefined ? "Edit Lease" : "Add Lease", () => setModal(null))}
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Tenant Name</label><input value={form.tenant} onChange={e => setForm(p => ({ ...p, tenant: e.target.value }))} placeholder="Full name" style={_modalInput} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Property</label><input value={form.property} onChange={e => setForm(p => ({ ...p, property: e.target.value }))} placeholder="123 Oak St" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Unit</label><input value={form.unit} onChange={e => setForm(p => ({ ...p, unit: e.target.value }))} placeholder="A" style={_modalInput} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Lease Start</label><input type="date" value={form.start} onChange={e => setForm(p => ({ ...p, start: e.target.value }))} style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Lease End</label><input type="date" value={form.end} onChange={e => setForm(p => ({ ...p, end: e.target.value }))} style={_modalInput} /></div>
+          </div>
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Monthly Rent</label><input type="number" value={form.rent} onChange={e => setForm(p => ({ ...p, rent: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+          <button onClick={save} disabled={saving} style={{ ..._modalSubmit(), opacity: saving ? 0.7 : 1 }}>{saving ? "Saving..." : modal.editing !== undefined ? "Save Changes" : "Add Lease"}</button>
+        </div></div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+        <button onClick={openAdd} style={_addBtn}>+ Add Lease</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <DashStatCard label="Total Leases" value={leases.length} />
+        <DashStatCard label="Expiring &lt;30d" value={expiring30} />
+        <DashStatCard label="Expiring &lt;90d" value={expiring90} />
+        <DashStatCard label="Monthly Rent" value={fmtD(leases.reduce((s, l) => s + l.rent, 0))} />
+      </div>
+
+      {leases.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+          {[{ label: "Q1", data: q1 }, { label: "Q2", data: q2 }, { label: "Q3", data: q3 }, { label: "Q4", data: q4 }].map(q => (
+            <div key={q.label} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{q.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{q.data.length}</div>
+              <div style={{ fontSize: 11, color: C.muted }}>renewal{q.data.length !== 1 ? "s" : ""}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 10 }}>
+        {sorted.map(l => {
+          const u = getUrgency(l);
+          return (
+            <div key={l.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 18px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{l.tenant}</div>
+                  <div style={{ fontSize: 12, color: C.muted }}>{l.property} — Unit {l.unit}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button onClick={() => openEdit(l.id)} style={_editBtn}>Edit</button>
+                  <span style={{ background: u.bg, color: u.color, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, letterSpacing: "0.04em" }}>{u.label} — {u.days}d</span>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Lease End</div><div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{l.end}</div></div>
+                <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Rent</div><div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{fmtD(l.rent)}/mo</div></div>
+                <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Start</div><div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{l.start}</div></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── MAINTENANCE LOG ─────────────────────────────────────────────────────────
+function MaintenanceLog({ session }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [filter, setFilter] = useState("open");
+  const [form, setForm] = useState({ property: "", unit: "", title: "", description: "", vendor: "", cost: "", priority: "normal" });
+
+  useEffect(() => {
+    if (!session) return;
+    supabase.from("maintenance_items").select("*").order("created_at", { ascending: false })
+      .then(res => { dbLog("maintenance_items.select", res); setItems(res.data || []); setLoading(false); });
+  }, [session]);
+
+  const openAdd = () => { setForm({ property: "", unit: "", title: "", description: "", vendor: "", cost: "", priority: "normal" }); setModal({}); };
+  const openEdit = (id) => { const m = items.find(x => x.id === id); setForm({ property: m.property_id || "", unit: m.unit_number || "", title: m.title, description: m.description || "", vendor: m.vendor || "", cost: String(m.cost || 0), priority: m.priority || "normal" }); setModal({ editing: id }); };
+  const save = async () => {
+    if (!form.title || !form.property) return;
+    setSaving(true);
+    if (modal.editing !== undefined) {
+      const res = await supabase.from("maintenance_items").update({ property_id: form.property, unit_number: form.unit, title: form.title, description: form.description, vendor: form.vendor, cost: num(form.cost), priority: form.priority }).eq("id", modal.editing).select().single();
+      dbLog("maintenance_items.update", res);
+      setItems(prev => prev.map(m => m.id === modal.editing ? { ...m, property_id: form.property, unit_number: form.unit, title: form.title, description: form.description, vendor: form.vendor, cost: num(form.cost), priority: form.priority } : m));
+    } else {
+      const res = await supabase.from("maintenance_items").insert({ user_id: session.user.id, property_id: form.property, unit_number: form.unit, title: form.title, description: form.description, vendor: form.vendor, cost: num(form.cost), priority: form.priority, status: "open" }).select().single();
+      dbLog("maintenance_items.insert", res);
+      if (res.data) setItems(prev => [res.data, ...prev]);
+    }
+    setSaving(false);
+    setModal(null);
+  };
+  const closeItem = async (id) => {
+    const today = new Date().toISOString().split("T")[0];
+    const res = await supabase.from("maintenance_items").update({ status: "closed", closed_date: today }).eq("id", id).select().single();
+    dbLog("maintenance_items.close", res);
+    setItems(prev => prev.map(m => m.id === id ? { ...m, status: "closed", closed_date: today } : m));
+  };
+  const reopenItem = async (id) => {
+    const res = await supabase.from("maintenance_items").update({ status: "open", closed_date: null }).eq("id", id).select().single();
+    dbLog("maintenance_items.reopen", res);
+    setItems(prev => prev.map(m => m.id === id ? { ...m, status: "open", closed_date: null } : m));
+  };
+
+  const filtered = filter === "all" ? items : items.filter(m => m.status === filter);
+  const openCount = items.filter(m => m.status === "open").length;
+  const closedCount = items.filter(m => m.status === "closed").length;
+  const totalCost = items.filter(m => m.status === "closed").reduce((s, m) => s + (m.cost || 0), 0);
+
+  const priorityBadge = (p) => {
+    const cfg = { urgent: { bg: C.redLight, color: C.red }, normal: { bg: C.bg, color: C.muted }, low: { bg: C.greenLight, color: C.greenDark } }[p] || { bg: C.bg, color: C.muted };
+    return <span style={{ background: cfg.bg, color: cfg.color, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, letterSpacing: "0.04em", textTransform: "uppercase" }}>{p}</span>;
+  };
+
+  if (loading) return <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading maintenance items...</div>;
+  if (items.length === 0 && !modal) return _emptyState("No maintenance items yet. Log your first issue to get started.", "+ Log Issue", openAdd);
+
+  return (
+    <div>
+      {modal && (
+        <div style={_modalOverlay}><div style={_modalBox}>
+          {_modalHeader(modal.editing !== undefined ? "Edit Item" : "Log Maintenance Issue", () => setModal(null))}
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Title</label><input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Leaking faucet" style={_modalInput} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Property</label><input value={form.property} onChange={e => setForm(p => ({ ...p, property: e.target.value }))} placeholder="123 Oak St" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Unit</label><input value={form.unit} onChange={e => setForm(p => ({ ...p, unit: e.target.value }))} placeholder="A" style={_modalInput} /></div>
+          </div>
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Description</label><input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Details..." style={_modalInput} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Vendor</label><input value={form.vendor} onChange={e => setForm(p => ({ ...p, vendor: e.target.value }))} placeholder="Plumber" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Cost</label><input type="number" value={form.cost} onChange={e => setForm(p => ({ ...p, cost: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Priority</label><select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))} style={{ ..._modalInput, cursor: "pointer" }}><option value="low">Low</option><option value="normal">Normal</option><option value="urgent">Urgent</option></select></div>
+          </div>
+          <button onClick={save} disabled={saving} style={{ ..._modalSubmit(), opacity: saving ? 0.7 : 1 }}>{saving ? "Saving..." : modal.editing !== undefined ? "Save Changes" : "Log Issue"}</button>
+        </div></div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          {["open", "closed", "all"].map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${filter === f ? C.green : C.border}`, background: filter === f ? C.greenLight : C.white, color: filter === f ? C.greenDark : C.muted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textTransform: "capitalize" }}>{f}</button>
+          ))}
+        </div>
+        <button onClick={openAdd} style={_addBtn}>+ Log Issue</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <DashStatCard label="Open Issues" value={openCount} />
+        <DashStatCard label="Closed" value={closedCount} />
+        <DashStatCard label="Closed Costs" value={fmtD(totalCost)} />
+      </div>
+
+      <div style={{ display: "grid", gap: 12 }}>
+        {filtered.map(m => (
+          <div key={m.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px", opacity: m.status === "closed" ? 0.7 : 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{m.title}</div>
+                <div style={{ fontSize: 12, color: C.muted }}>{m.property_id}{m.unit_number ? ` — Unit ${m.unit_number}` : ""}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {m.status === "open" ? (
+                  <button onClick={() => closeItem(m.id)} style={{ ..._editBtn, color: C.green }}>Close</button>
+                ) : (
+                  <button onClick={() => reopenItem(m.id)} style={{ ..._editBtn, color: C.muted }}>Reopen</button>
+                )}
+                <button onClick={() => openEdit(m.id)} style={_editBtn}>Edit</button>
+                {priorityBadge(m.priority)}
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+              <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Vendor</div><div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{m.vendor || "—"}</div></div>
+              <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Cost</div><div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{m.cost ? fmtD(m.cost) : "—"}</div></div>
+              <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Reported</div><div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{m.reported_date || "—"}</div></div>
+              <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</div><div style={{ fontSize: 13, fontWeight: 700, color: m.status === "open" ? C.yellow : C.greenDark }}>{m.status === "open" ? "OPEN" : "CLOSED"}{m.closed_date ? ` (${m.closed_date})` : ""}</div></div>
+            </div>
+            {m.description && <div style={{ fontSize: 12, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>{m.description}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── DASHBOARD SETTINGS PANEL ────────────────────────────────────────────────
+function DashSettingsPanel({ standards, onSaveStandards, defaultMode, onSetDefaultMode, onSignOut }) {
+  const [name, setName] = useState(() => { try { return localStorage.getItem("doorbase_profile_name") || ""; } catch { return ""; } });
+  const [email, setEmail] = useState(() => { try { return localStorage.getItem("doorbase_profile_email") || ""; } catch { return ""; } });
+  const [s, setS] = useState(JSON.parse(JSON.stringify(standards)));
+  const [saved, setSaved] = useState(false);
+
+  const sh = (section, key) => (v) => setS(prev => ({ ...prev, [section]: { ...prev[section], [key]: parseFloat(v) || 0 } }));
+
+  const handleSave = () => {
+    try { localStorage.setItem("doorbase_profile_name", name); } catch {}
+    try { localStorage.setItem("doorbase_profile_email", email); } catch {}
+    onSaveStandards(s);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const inputStyle = {
+    width: "100%", padding: "10px 12px", background: C.inputBg, border: `1.5px solid ${C.border}`,
+    borderRadius: 8, fontSize: 14, color: C.text, fontFamily: "'DM Sans', sans-serif",
+    outline: "none", boxSizing: "border-box",
+  };
+  const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 4 };
+  const sectionHeader = (text) => (
+    <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10, marginTop: 24 }}>{text}</div>
+  );
+  const Dot = ({ color }) => <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, display: "inline-block", marginRight: 6 }} />;
+
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}>Settings</div>
+      <div style={{ fontSize: 14, color: C.muted, marginBottom: 24 }}>Manage your profile, deal standards, and preferences.</div>
+
+      {sectionHeader("Profile")}
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 8 }}>
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Name</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Email</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" style={inputStyle} />
+        </div>
+      </div>
+
+      {sectionHeader("Deal Standards")}
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Set your own thresholds for green / yellow verdicts</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Buy & Hold</div>
+        <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 8, display: "flex", alignItems: "center" }}><Dot color={C.green} />Green — Deal Works</div>
+          <TwoCol>
+            <div><label style={labelStyle}>Min Cash Flow / Mo</label><div style={{ position: "relative" }}><span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.mutedLight, fontSize: 13 }}>$</span><input type="number" value={s.hold.greenCashFlow} onChange={e => sh("hold", "greenCashFlow")(e.target.value)} style={{ ...inputStyle, paddingLeft: 22 }} /></div></div>
+            <div><label style={labelStyle}>Min Cap Rate</label><div style={{ position: "relative" }}><span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.mutedLight, fontSize: 13 }}>%</span><input type="number" value={s.hold.greenCapRate} onChange={e => sh("hold", "greenCapRate")(e.target.value)} style={{ ...inputStyle, paddingLeft: 22 }} /></div></div>
+          </TwoCol>
+        </div>
+        <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 8, display: "flex", alignItems: "center" }}><Dot color={C.yellow} />Yellow — Marginal</div>
+          <TwoCol>
+            <div><label style={labelStyle}>Min Cash Flow / Mo</label><div style={{ position: "relative" }}><span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.mutedLight, fontSize: 13 }}>$</span><input type="number" value={s.hold.yellowCashFlow} onChange={e => sh("hold", "yellowCashFlow")(e.target.value)} style={{ ...inputStyle, paddingLeft: 22 }} /></div></div>
+            <div><label style={labelStyle}>Min Cap Rate</label><div style={{ position: "relative" }}><span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.mutedLight, fontSize: 13 }}>%</span><input type="number" value={s.hold.yellowCapRate} onChange={e => sh("hold", "yellowCapRate")(e.target.value)} style={{ ...inputStyle, paddingLeft: 22 }} /></div></div>
+          </TwoCol>
+        </div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Fix & Flip</div>
+        <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 8, display: "flex", alignItems: "center" }}><Dot color={C.green} />Green — Deal Works</div>
+          <TwoCol>
+            <div><label style={labelStyle}>Min Net Profit</label><div style={{ position: "relative" }}><span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.mutedLight, fontSize: 13 }}>$</span><input type="number" value={s.flip.greenProfit} onChange={e => sh("flip", "greenProfit")(e.target.value)} style={{ ...inputStyle, paddingLeft: 22 }} /></div></div>
+            <div><label style={labelStyle}>Min ROI</label><div style={{ position: "relative" }}><span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.mutedLight, fontSize: 13 }}>%</span><input type="number" value={s.flip.greenROI} onChange={e => sh("flip", "greenROI")(e.target.value)} style={{ ...inputStyle, paddingLeft: 22 }} /></div></div>
+          </TwoCol>
+        </div>
+        <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 8, display: "flex", alignItems: "center" }}><Dot color={C.yellow} />Yellow — Marginal</div>
+          <TwoCol>
+            <div><label style={labelStyle}>Min Net Profit</label><div style={{ position: "relative" }}><span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.mutedLight, fontSize: 13 }}>$</span><input type="number" value={s.flip.yellowProfit} onChange={e => sh("flip", "yellowProfit")(e.target.value)} style={{ ...inputStyle, paddingLeft: 22 }} /></div></div>
+            <div><label style={labelStyle}>Min ROI</label><div style={{ position: "relative" }}><span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.mutedLight, fontSize: 13 }}>%</span><input type="number" value={s.flip.yellowROI} onChange={e => sh("flip", "yellowROI")(e.target.value)} style={{ ...inputStyle, paddingLeft: 22 }} /></div></div>
+          </TwoCol>
+        </div>
+      </div>
+
+      {sectionHeader("Default Analyzer Mode")}
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>Choose which analyzer opens by default</div>
+        <div style={{ display: "flex", background: C.bg, borderRadius: 8, padding: 3, gap: 3, border: `1px solid ${C.border}` }}>
+          {[{ id: "hold", label: "Buy & Hold" }, { id: "flip", label: "Fix & Flip" }].map(m => (
+            <button key={m.id} onClick={() => onSetDefaultMode(m.id)} style={{
+              flex: 1, padding: "8px 16px", borderRadius: 6, border: "none",
+              background: defaultMode === m.id ? C.green : "transparent",
+              color: defaultMode === m.id ? C.white : C.muted,
+              fontWeight: defaultMode === m.id ? 700 : 500,
+              fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+              transition: "all 0.15s",
+            }}>{m.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {sectionHeader("App Version")}
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 24 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>DoorBase Beta v0.1</div>
+      </div>
+
+      <button onClick={handleSave} style={{
+        width: "100%", padding: "14px", background: C.green, border: "none", borderRadius: 10,
+        color: C.white, fontSize: 15, fontWeight: 700, cursor: "pointer",
+        fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)",
+      }}>{saved ? "Saved!" : "Save Settings"}</button>
+
+      <div style={{ height: 1, background: C.border, margin: "24px 0" }} />
+      <button onClick={onSignOut} style={{
+        width: "100%", padding: "12px", background: "none", border: `1.5px solid ${C.border}`,
+        borderRadius: 10, color: C.red, fontSize: 14, fontWeight: 600,
+        cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+      }}>Sign Out</button>
+    </div>
+  );
+}
+
+// ─── FEEDBACK PANEL ──────────────────────────────────────────────────────────
+function FeedbackPanel() {
+  const [rating, setRating] = useState(0);
+  const [trying, setTrying] = useState("");
+  const [broken, setBroken] = useState("");
+  const [other, setOther] = useState("");
+  const [status, setStatus] = useState("idle");
+
+  const handleSubmit = async () => {
+    if (rating === 0 && !trying && !broken) return;
+    setStatus("loading");
+    try {
+      await fetch("https://www.news-thelegacybridge.com/api/v1/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "feedback@doorbase.app",
+          utm_source: "doorbase",
+          utm_medium: "feedback",
+          utm_campaign: "beta",
+          custom_fields: { rating, trying, broken, other },
+        }),
+      });
+      setStatus("success");
+    } catch {
+      setStatus("success");
+    }
+  };
+
+  const inputStyle = {
+    width: "100%", padding: "10px 12px", background: C.inputBg, border: `1.5px solid ${C.border}`,
+    borderRadius: 8, fontSize: 14, color: C.text, fontFamily: "'DM Sans', sans-serif",
+    outline: "none", boxSizing: "border-box", resize: "vertical",
+  };
+  const labelStyle = { display: "block", fontSize: 13, fontWeight: 600, color: C.muted, marginBottom: 6 };
+
+  if (status === "success") {
+    return (
+      <div style={{ maxWidth: 560 }}>
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "40px 24px", textAlign: "center" }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>&#10003;</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 8 }}>Thanks — we read every one.</div>
+          <div style={{ fontSize: 14, color: C.muted }}>Your feedback helps us build a better DoorBase.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}>Beta Feedback</div>
+      <div style={{ fontSize: 14, color: C.muted, marginBottom: 24, lineHeight: 1.5 }}>Tell us what's working, what's broken, and what's missing.</div>
+
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <label style={labelStyle}>Overall Rating</label>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[1, 2, 3, 4, 5].map(n => (
+            <div key={n} onClick={() => setRating(n)} style={{
+              width: 40, height: 40, borderRadius: 8,
+              border: `1.5px solid ${n <= rating ? C.green : C.border}`,
+              background: n <= rating ? C.greenLight : C.bg,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", fontSize: 18, transition: "all 0.15s",
+              color: n <= rating ? C.green : C.mutedLight,
+            }}>&#9733;</div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <label style={labelStyle}>What are you trying to do?</label>
+        <textarea value={trying} onChange={e => setTrying(e.target.value)} rows={3} placeholder="I'm trying to..." style={inputStyle} />
+      </div>
+
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <label style={labelStyle}>What's not working or missing?</label>
+        <textarea value={broken} onChange={e => setBroken(e.target.value)} rows={3} placeholder="It would be better if..." style={inputStyle} />
+      </div>
+
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 24 }}>
+        <label style={labelStyle}>Any other thoughts? <span style={{ fontWeight: 400, color: C.mutedLight }}>(optional)</span></label>
+        <textarea value={other} onChange={e => setOther(e.target.value)} rows={2} placeholder="Anything else..." style={inputStyle} />
+      </div>
+
+      <button onClick={handleSubmit} disabled={status === "loading"} style={{
+        width: "100%", padding: "14px", background: C.green, border: "none", borderRadius: 10,
+        color: C.white, fontSize: 15, fontWeight: 700, cursor: "pointer",
+        fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)",
+        opacity: status === "loading" ? 0.75 : 1,
+      }}>{status === "loading" ? "Sending..." : "Submit Feedback"}</button>
+    </div>
+  );
+}
+
+// ─── DASHBOARD ───────────────────────────────────────────────────────────────
+
+
+function DoorBaseLogo() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
+        <path d="M8 34 L8 8 L28 8 L28 34" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+        <path d="M8 8 L8 34 L20 31 L20 11 Z" fill="#22C55E" opacity="0.9"/>
+        <circle cx="18" cy="21" r="1.5" fill="white" opacity="0.9"/>
+        <line x1="4" y1="34" x2="32" y2="34" stroke="#22C55E" strokeWidth="2" strokeLinecap="round"/>
+      </svg>
+      <div style={{ display: "flex", alignItems: "baseline" }}>
+        <span style={{ fontSize: 18, fontWeight: 800, color: C.text, fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em" }}>Door</span>
+        <span style={{ fontSize: 18, fontWeight: 800, color: C.green, fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em" }}>Base</span>
+      </div>
+    </div>
+  );
+}
+
+function SidebarItem({ label, active, soon, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={soon ? undefined : onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        padding: "9px 14px", borderRadius: 8, marginBottom: 2,
+        background: active ? C.greenLight : hovered && !soon ? C.bg : "transparent",
+        color: active ? C.greenDark : soon ? C.mutedLight : C.muted,
+        fontSize: 13, fontWeight: active ? 700 : 500,
+        cursor: soon ? "default" : "pointer",
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        transition: "all 0.12s",
+        fontFamily: "'DM Sans', sans-serif",
+      }}
+    >
+      <span>{label}</span>
+      {soon && <span style={{ fontSize: 10, fontWeight: 600, color: C.mutedLight, background: C.bg, padding: "2px 6px", borderRadius: 4 }}>Soon</span>}
+    </div>
+  );
+}
+
+function DashStatCard({ label, value, sub }) {
+  return (
+    <div style={{
+      background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
+      padding: "18px 16px", flex: 1,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: C.text }}>{value}{sub && <span style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>{sub}</span>}</div>
+    </div>
+  );
+}
+
+function DashVerdictBadge({ verdict }) {
+  const cfg = {
+    green: { bg: C.greenLight, color: C.greenDark, label: "DEAL WORKS" },
+    yellow: { bg: C.yellowLight, color: C.yellowDark, label: "MARGINAL" },
+    red: { bg: C.redLight, color: C.red, label: "PASS" },
+  }[verdict];
+  return (
+    <span style={{
+      background: cfg.bg, color: cfg.color, fontSize: 11, fontWeight: 700,
+      padding: "4px 10px", borderRadius: 6, letterSpacing: "0.04em",
+    }}>{cfg.label}</span>
+  );
+}
+
+function HomePickerCard({ title, desc, checklist, stats, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: C.white, borderRadius: 16,
+        border: `2px solid ${hovered ? C.green : C.border}`,
+        padding: "32px 28px", cursor: "pointer",
+        transition: "all 0.2s",
+        transform: hovered ? "translateY(-4px)" : "none",
+        boxShadow: hovered ? "0 8px 24px rgba(0,0,0,0.1)" : "0 1px 3px rgba(0,0,0,0.07)",
+      }}
+    >
+      <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 6 }}>{title}</div>
+      <div style={{ fontSize: 14, color: C.muted, lineHeight: 1.6, marginBottom: 20 }}>{desc}</div>
+      <div style={{ marginBottom: 24 }}>
+        {checklist.map((item, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ color: C.green, fontSize: 13, fontWeight: 700 }}>&#10003;</span>
+            <span style={{ fontSize: 13, color: C.text }}>{item}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 16, display: "flex", gap: 24 }}>
+        {stats.map((s, i) => (
+          <div key={i}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{s.value}</div>
+            <div style={{ fontSize: 11, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const PIPELINE_NAV = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "analyzer", label: "Deal Analyzer" },
+  { id: "saved", label: "Saved Deals" },
+  { id: "worksheet", label: "Underwriting Worksheet" },
+  { id: "rehab", label: "Rehab Estimator" },
+  { id: "rent", label: "Rent Analysis" },
+  { id: "comps", label: "Comp Tracker" },
+];
+
+const PROPERTIES_NAV = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "overview", label: "Portfolio Overview" },
+  { id: "cashflow", label: "Cash Flow Tracker" },
+  { id: "tenants", label: "Tenant Tracker" },
+  { id: "maintenance", label: "Maintenance Log" },
+  { id: "financing", label: "Financing Tracker" },
+  { id: "leases", label: "Lease Renewals" },
+  { id: "tax", label: "Tax Summary", soon: true },
+  { id: "docs", label: "Documents", soon: true },
+];
+
+function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, isPro, onShowCapture, onEmailResults, onSignOut, session }) {
+  const [view, setView] = useState("home");
+  const [pipelineNav, setPipelineNav] = useState("dashboard");
+  const [propertiesNav, setPropertiesNav] = useState("dashboard");
+  const [showWorksheet, setShowWorksheet] = useState(false);
+  const [showRehab, setShowRehab] = useState(false);
+  const [showRentAnalysis, setShowRentAnalysis] = useState(false);
+  const [showCompTracker, setShowCompTracker] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [dashPanel, setDashPanel] = useState(null); // "settings" | "feedback" | null
+  const [convertDeal, setConvertDeal] = useState(null); // deal object to convert to property
+  const [convertForm, setConvertForm] = useState({ address: "", units: "1", monthlyRent: "", monthlyExpenses: "", loanBalance: "" });
+  const [convertSaving, setConvertSaving] = useState(false);
+
+  const [deals, setDeals] = useState([]);
+  const [properties, setProperties] = useState([]);
+  const [dealsLoading, setDealsLoading] = useState(true);
+  const [propsLoading, setPropsLoading] = useState(true);
+  const [briefingTenants, setBriefingTenants] = useState([]);
+  const [briefingLeases, setBriefingLeases] = useState([]);
+  const [briefingLoans, setBriefingLoans] = useState([]);
+  const [briefingMaintenance, setBriefingMaintenance] = useState([]);
+
+  const firstName = session?.user?.email ? session.user.email.split("@")[0].replace(/[^a-zA-Z]/g, " ").split(" ")[0].charAt(0).toUpperCase() + session.user.email.split("@")[0].replace(/[^a-zA-Z]/g, " ").split(" ")[0].slice(1) : "there";
+  const todayStr = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+
+  const refreshAll = useCallback(() => {
+    if (!session) return;
+    supabase.from("deals").select("*").order("created_at", { ascending: false })
+      .then(res => { dbLog("dashboard.deals", res); setDeals(res.data || []); setDealsLoading(false); });
+    supabase.from("properties").select("*").order("created_at", { ascending: false })
+      .then(res => { dbLog("dashboard.properties", res); setProperties(res.data || []); setPropsLoading(false); });
+    supabase.from("tenants").select("*").then(res => { dbLog("dashboard.tenants", res); setBriefingTenants(res.data || []); });
+    supabase.from("leases").select("*").then(res => { dbLog("dashboard.leases", res); setBriefingLeases(res.data || []); });
+    supabase.from("loans").select("*").then(res => { dbLog("dashboard.loans", res); setBriefingLoans(res.data || []); });
+    supabase.from("maintenance_items").select("*").then(res => { dbLog("dashboard.maintenance", res); setBriefingMaintenance(res.data || []); });
+  }, [session]);
+
+  // Load on mount and refresh whenever user navigates to a dashboard view
+  useEffect(() => { refreshAll(); }, [refreshAll]);
+  useEffect(() => { if (pipelineNav === "dashboard") refreshAll(); }, [pipelineNav, refreshAll]);
+  useEffect(() => { if (propertiesNav === "dashboard") refreshAll(); }, [propertiesNav, refreshAll]);
+
+  const refreshDeals = () => refreshAll();
+  const refreshProperties = () => refreshAll();
+  const openConvert = (deal) => {
+    const inputs = deal.inputs || {};
+    setConvertForm({
+      address: deal.address || "",
+      units: String(inputs.units || 1),
+      monthlyRent: String(inputs.monthlyRent || inputs.grossRent || ""),
+      monthlyExpenses: String(inputs.monthlyExpenses || ""),
+      loanBalance: String(inputs.loanAmount || inputs.loanBalance || ""),
+    });
+    setConvertDeal(deal);
+  };
+  const saveConvert = async () => {
+    if (!convertForm.address) return;
+    setConvertSaving(true);
+    const res = await supabase.from("properties").insert({
+      user_id: session.user.id,
+      address: convertForm.address,
+      units: parseInt(convertForm.units) || 1,
+      monthly_rent: num(convertForm.monthlyRent),
+      monthly_expenses: num(convertForm.monthlyExpenses),
+      loan_balance: num(convertForm.loanBalance),
+      purchase_price: convertDeal.purchase_price || 0,
+      status: "current",
+    }).select().single();
+    dbLog("properties.insert(convert)", res);
+    setConvertSaving(false);
+    setConvertDeal(null);
+    refreshProperties();
+  };
+
+  const greenDeals = deals.filter(d => d.verdict === "green").length;
+  const yellowDeals = deals.filter(d => d.verdict === "yellow").length;
+  const redDeals = deals.filter(d => d.verdict === "red").length;
+
+  const totalRent = properties.reduce((s, p) => s + (p.monthly_rent || 0), 0);
+  const totalCashFlow = properties.reduce((s, p) => s + ((p.monthly_rent || 0) - (p.monthly_expenses || 0)), 0);
+  const lateCount = briefingTenants.filter(t => t.status === "late").length;
+  const openMaintenance = briefingMaintenance.filter(m => m.status === "open").length;
+
+  const sidebarStyle = {
+    width: 220, background: C.white, borderRight: `1px solid ${C.border}`,
+    height: "100vh", position: "fixed", left: 0, top: 0, zIndex: 60,
+    display: "flex", flexDirection: "column",
+  };
+
+  const topBarStyle = {
+    height: 56, background: C.white, borderBottom: `1px solid ${C.border}`,
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    padding: "0 28px",
+    position: "fixed", top: 0, left: 220, right: 0, zIndex: 50,
+  };
+
+  const avatarStyle = {
+    width: 36, height: 36, borderRadius: "50%", background: C.green,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 13, fontWeight: 700, color: C.white, fontFamily: "'DM Sans', sans-serif",
+  };
+
+  // ─── HOME PICKER ───
+  if (view === "home") {
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg }}>
+        <nav style={{ background: C.nav, boxShadow: "0 1px 0 rgba(255,255,255,0.06)" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 32px", height: 62, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+                <path d="M8 34 L8 8 L28 8 L28 34" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <path d="M8 8 L8 34 L20 31 L20 11 Z" fill="#22C55E" opacity="0.9"/>
+                <circle cx="18" cy="21" r="1.5" fill="white" opacity="0.9"/>
+                <line x1="4" y1="34" x2="32" y2="34" stroke="#22C55E" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              <div style={{ display: "flex", alignItems: "baseline" }}>
+                <span style={{ fontSize: 20, fontWeight: 800, color: "#F8FAFC", fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em", lineHeight: 1 }}>Door</span>
+                <span style={{ fontSize: 20, fontWeight: 800, color: "#22C55E", fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em", lineHeight: 1 }}>Base</span>
+              </div>
+            </div>
+            <div style={avatarStyle}>JT</div>
+          </div>
+        </nav>
+
+        <div style={{ maxWidth: 880, margin: "0 auto", padding: "80px 32px" }}>
+          <div style={{ textAlign: "center", marginBottom: 48 }}>
+            <div style={{ fontSize: 32, fontWeight: 800, color: C.text, marginBottom: 8 }}>Welcome back</div>
+            <div style={{ fontSize: 16, color: C.muted }}>What are you working on today?</div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <HomePickerCard
+              title="Deal Pipeline"
+              desc="Evaluate new deals — analyze, underwrite, compare, and build your pipeline."
+              checklist={["Buy & Hold + Fix & Flip Analyzer", "Underwriting Worksheet", "Saved Deals & Side-by-Side", "Rehab Estimator"]}
+              stats={[
+                { label: "Deals", value: deals.length },
+                { label: "Green", value: greenDeals },
+                { label: "Yellow", value: yellowDeals },
+              ]}
+              onClick={() => setView("pipeline")}
+            />
+            <HomePickerCard
+              title="My Properties"
+              desc="Manage what you already own — cash flow, tenants, maintenance, and more."
+              checklist={["Portfolio Overview", "Cash Flow Tracker", "Tenant & Lease Manager", "Maintenance Log"]}
+              stats={[
+                { label: "Doors", value: properties.reduce((s, p) => s + (p.units || 1), 0) },
+                { label: "Rent/mo", value: fmtD(totalRent) },
+                { label: "Cash Flow", value: fmtD(totalCashFlow) },
+              ]}
+              onClick={() => setView("properties")}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── PIPELINE DASHBOARD ───
+  if (view === "pipeline") {
+    const navTitle = { dashboard: "Dashboard", analyzer: "Deal Analyzer", saved: "Saved Deals", tools: "Pro Tools" }[pipelineNav] || "Deal Pipeline";
+    const bestHold = deals.filter(d => d.deal_type === "hold" && d.verdict === "green").map(d => d.cash_flow ? fmtD(d.cash_flow) + "/mo" : "—")[0] || "—";
+
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg }}>
+        <style>{`
+          @media (max-width: 767px) {
+            .db-sidebar { display: none !important; }
+            .db-topbar { left: 0 !important; padding: 0 16px !important; }
+            .db-main { margin-left: 0 !important; padding: 16px !important; padding-top: 72px !important; padding-bottom: 84px !important; }
+            .db-stat-row { flex-wrap: wrap !important; grid-template-columns: 1fr 1fr !important; }
+            .db-stat-row > div { min-width: calc(50% - 6px) !important; flex: none !important; width: calc(50% - 6px) !important; }
+            .db-deals-header { display: none !important; }
+            .db-deal-row { grid-template-columns: 1fr auto !important; gap: 8px !important; }
+            .db-deal-type { display: none !important; }
+          }
+          @media (min-width: 768px) {
+            .db-bottomtab { display: none !important; }
+          }
+        `}</style>
+
+        {showWorksheet && <UnderwritingWorksheet onClose={() => setShowWorksheet(false)} onUsePrice={() => { setShowWorksheet(false); setPipelineNav("analyzer"); }} />}
+        {showRehab && <RehabEstimator onClose={() => setShowRehab(false)} onUseCost={() => { setShowRehab(false); setPipelineNav("analyzer"); }} />}
+        {showRentAnalysis && <RentAnalysisWorksheet onClose={() => setShowRentAnalysis(false)} onUseRent={() => { setShowRentAnalysis(false); setPipelineNav("analyzer"); }} />}
+        {showCompTracker && <CompTrackerSheet onClose={() => setShowCompTracker(false)} onUseARV={() => { setShowCompTracker(false); setPipelineNav("analyzer"); }} />}
+
+        {/* More drawer — mobile only */}
+        {showMore && (
+          <>
+            <div onClick={() => setShowMore(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 300 }} />
+            <div style={{
+              position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 301,
+              background: C.white, borderRadius: "16px 16px 0 0",
+              padding: "24px", paddingBottom: 32,
+              boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",
+              fontFamily: "'DM Sans', sans-serif",
+            }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border, margin: "0 auto 20px" }} />
+              {[
+                { label: "Underwriting Worksheet", onClick: () => { setShowMore(false); setShowWorksheet(true); } },
+                { label: "Rehab Estimator", onClick: () => { setShowMore(false); setShowRehab(true); } },
+                { label: "Rent Analysis", onClick: () => { setShowMore(false); setShowRentAnalysis(true); } },
+                { label: "Comp Tracker", onClick: () => { setShowMore(false); setShowCompTracker(true); } },
+              ].map((item, i) => (
+                <div key={i} onClick={item.soon ? undefined : item.onClick} style={{
+                  padding: "14px 0", borderBottom: `1px solid ${C.border}`,
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  cursor: item.soon ? "default" : "pointer",
+                  color: item.soon ? C.mutedLight : C.text,
+                  fontSize: 15, fontWeight: 600,
+                }}>
+                  <span>{item.label}</span>
+                  {item.soon && <span style={{ fontSize: 11, fontWeight: 600, color: C.mutedLight, background: C.bg, padding: "3px 8px", borderRadius: 4 }}>Soon</span>}
+                </div>
+              ))}
+              <div style={{ height: 1, background: C.border, margin: "8px 0" }} />
+              <div onClick={() => { setShowMore(false); setDashPanel("settings"); }} style={{ padding: "14px 0", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10, cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                <span>Settings</span>
+              </div>
+              <div onClick={() => { setShowMore(false); setDashPanel("feedback"); }} style={{ padding: "14px 0", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                <span>Feedback</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Desktop sidebar */}
+        <div className="db-sidebar" style={sidebarStyle}>
+          <div style={{ padding: "18px 16px 24px" }}><DoorBaseLogo /></div>
+          <div style={{ padding: "0 10px", flex: 1 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.mutedLight, textTransform: "uppercase", letterSpacing: "0.1em", padding: "0 14px 8px", fontFamily: "'DM Sans', sans-serif" }}>Deal Tools</div>
+            {PIPELINE_NAV.map(item => (
+              <SidebarItem
+                key={item.id}
+                label={item.label}
+                active={pipelineNav === item.id && !item.soon && !dashPanel}
+                soon={item.soon}
+                onClick={() => {
+                  setDashPanel(null);
+                  if (item.id === "worksheet") setShowWorksheet(true);
+                  else if (item.id === "rehab") setShowRehab(true);
+                  else if (item.id === "rent") setShowRentAnalysis(true);
+                  else if (item.id === "comps") setShowCompTracker(true);
+                  else setPipelineNav(item.id);
+                }}
+              />
+            ))}
+          </div>
+          <div style={{ padding: "16px" }}>
+            <button onClick={() => setView("home")} style={{
+              width: "100%", padding: "10px", background: C.bg, border: `1px solid ${C.border}`,
+              borderRadius: 8, fontSize: 12, fontWeight: 600, color: C.muted,
+              cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+            }}>Switch Mode</button>
+            <div style={{ height: 1, background: C.border, margin: "12px 0" }} />
+            <div onClick={() => { setDashPanel("settings"); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 6px", borderRadius: 6, cursor: "pointer", color: dashPanel === "settings" ? C.greenDark : C.muted, fontSize: 12, fontWeight: 600 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              Settings
+            </div>
+            <div onClick={() => { setDashPanel("feedback"); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 6px", borderRadius: 6, cursor: "pointer", color: dashPanel === "feedback" ? C.greenDark : C.muted, fontSize: 12, fontWeight: 600 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              Feedback
+            </div>
+          </div>
+        </div>
+
+        {/* Top bar */}
+        <div className="db-topbar" style={topBarStyle}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: C.text, fontFamily: "'DM Sans', sans-serif" }}>{dashPanel === "settings" ? "Settings" : dashPanel === "feedback" ? "Beta Feedback" : navTitle}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {pipelineNav === "analyzer" && !dashPanel && (
+              <button onClick={onShowSettings} style={{
+                background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
+                width: 36, height: 36, display: "flex", alignItems: "center",
+                justifyContent: "center", cursor: "pointer", fontSize: 14,
+              }}>⚙️</button>
+            )}
+            <div style={avatarStyle}>JT</div>
+          </div>
+        </div>
+
+        {/* Convert to Property modal */}
+        {convertDeal && (
+          <div style={_modalOverlay}><div style={_modalBox}>
+            {_modalHeader("Convert Deal to Property", () => setConvertDeal(null))}
+            <div style={{ background: C.greenLight, border: `1px solid ${C.green}33`, borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.greenDark }}>Converting: {convertDeal.address} ({convertDeal.deal_type === "hold" ? "Buy & Hold" : "Fix & Flip"})</div>
+            </div>
+            <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Address</label><input value={convertForm.address} onChange={e => setConvertForm(p => ({ ...p, address: e.target.value }))} style={_modalInput} /></div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div><label style={_modalLabel}>Units</label><input type="number" value={convertForm.units} onChange={e => setConvertForm(p => ({ ...p, units: e.target.value }))} style={_modalInput} /></div>
+              <div><label style={_modalLabel}>Monthly Rent</label><input type="number" value={convertForm.monthlyRent} onChange={e => setConvertForm(p => ({ ...p, monthlyRent: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div><label style={_modalLabel}>Monthly Expenses</label><input type="number" value={convertForm.monthlyExpenses} onChange={e => setConvertForm(p => ({ ...p, monthlyExpenses: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+              <div><label style={_modalLabel}>Loan Balance</label><input type="number" value={convertForm.loanBalance} onChange={e => setConvertForm(p => ({ ...p, loanBalance: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+            </div>
+            <button onClick={saveConvert} disabled={convertSaving} style={{ ..._modalSubmit(), opacity: convertSaving ? 0.7 : 1 }}>{convertSaving ? "Creating..." : "Create Property"}</button>
+          </div></div>
+        )}
+
+        {/* Main content */}
+        <div className="db-main" style={{ marginLeft: 220, padding: "28px", paddingTop: 84 }}>
+          {dashPanel === "settings" && <DashSettingsPanel standards={standards} onSaveStandards={onSaveStandards} defaultMode={mode} onSetDefaultMode={setMode} onSignOut={onSignOut} />}
+          {dashPanel === "feedback" && <FeedbackPanel />}
+          {/* Pipeline Morning Briefing */}
+          {!dashPanel && pipelineNav === "dashboard" && (() => {
+            const greenDealsList = deals.filter(d => d.verdict === "green");
+            const bestCF = deals.filter(d => d.deal_type === "hold" && d.cash_flow).sort((a, b) => b.cash_flow - a.cash_flow)[0];
+            const bestROI = deals.filter(d => d.roi).sort((a, b) => b.roi - a.roi)[0];
+            const last3 = deals.slice(0, 3);
+            return (
+            <>
+              {/* Morning header */}
+              <div style={{ marginBottom: 28 }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 4 }}>Good morning, {firstName}.</div>
+                <div style={{ fontSize: 14, color: C.muted }}>{todayStr}</div>
+              </div>
+
+              {/* Row 1 — Stat cards */}
+              <div className="db-stat-row" style={{ display: "flex", gap: 12, marginBottom: 28 }}>
+                <DashStatCard label="Deals Analyzed" value={deals.length} />
+                <DashStatCard label="Green Verdicts" value={greenDeals} />
+                <DashStatCard label="Best Cash Flow" value={bestCF ? fmtD(bestCF.cash_flow) + "/mo" : "—"} />
+                <DashStatCard label="Best ROI" value={bestROI ? fmtP(bestROI.roi) : "—"} />
+              </div>
+
+              {/* Row 2 — Your Pipeline */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Your Pipeline</div>
+                <button onClick={() => setPipelineNav("analyzer")} style={{ background: C.green, border: "none", borderRadius: 8, padding: "10px 20px", color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)" }}>+ Analyze New Deal</button>
+              </div>
+              {dealsLoading ? (
+                <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading deals...</div>
+              ) : last3.length === 0 ? (
+                <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center", marginBottom: 28 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, lineHeight: 1.5 }}>No deals yet. Analyze your first deal to start building your pipeline.</div>
+                </div>
+              ) : (
+                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", marginBottom: 28 }}>
+                  {last3.map((d, i) => {
+                    const metric = d.deal_type === "hold" ? (d.cash_flow ? fmtD(d.cash_flow) + "/mo" : "—") : (d.net_profit ? fmtD(d.net_profit) : "—");
+                    return (
+                    <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: i < last3.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{d.address}</div>
+                        <div style={{ fontSize: 12, color: C.muted }}>{d.deal_type === "hold" ? "Buy & Hold" : "Fix & Flip"}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{metric}</span>
+                        <DashVerdictBadge verdict={d.verdict} />
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Row 3 — Green Deals */}
+              <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Green Deals Worth a Second Look</div>
+              {greenDealsList.length === 0 ? (
+                <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, lineHeight: 1.5 }}>No green deals yet. Run your first analysis.</div>
+                </div>
+              ) : (
+                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+                  {greenDealsList.map((d, i) => (
+                    <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: i < greenDealsList.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{d.address}</div>
+                        <div style={{ fontSize: 12, color: C.muted }}>{d.deal_type === "hold" ? "Buy & Hold" : "Fix & Flip"}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        {d.deal_type === "hold" ? (
+                          <>
+                            <div style={{ textAlign: "right" }}><div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Cash Flow</div><div style={{ fontSize: 14, fontWeight: 700, color: C.greenDark }}>{d.cash_flow ? fmtD(d.cash_flow) + "/mo" : "—"}</div></div>
+                            <div style={{ textAlign: "right" }}><div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Cap Rate</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{d.cap_rate ? fmtP(d.cap_rate) : "—"}</div></div>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ textAlign: "right" }}><div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Profit</div><div style={{ fontSize: 14, fontWeight: 700, color: C.greenDark }}>{d.net_profit ? fmtD(d.net_profit) : "—"}</div></div>
+                            <div style={{ textAlign: "right" }}><div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>ROI</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{d.roi ? fmtP(d.roi) : "—"}</div></div>
+                          </>
+                        )}
+                        <button onClick={() => openConvert(d)} style={{ background: C.green, border: "none", borderRadius: 6, padding: "6px 12px", color: C.white, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>Convert to Property</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+            );
+          })()}
+          {/* Analyzer */}
+          {!dashPanel && pipelineNav === "analyzer" && (
+            <>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 20 }}>
+                <div style={{ display: "flex", background: C.white, borderRadius: 8, padding: 3, gap: 3, border: `1px solid ${C.border}` }}>
+                  {[{ id: "hold", label: "Buy & Hold" }, { id: "flip", label: "Fix & Flip" }].map(m => (
+                    <button key={m.id} onClick={() => setMode(m.id)} style={{
+                      padding: "8px 20px", borderRadius: 6, border: "none",
+                      background: mode === m.id ? C.green : "transparent",
+                      color: mode === m.id ? C.white : C.muted,
+                      fontWeight: mode === m.id ? 700 : 500,
+                      fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                      transition: "all 0.15s",
+                    }}>{m.label}</button>
+                  ))}
+                </div>
+              </div>
+              {mode === "hold"
+                ? <BuyHoldAnalyzer standards={standards} onScrollToPro={() => {}} onEmailResults={onEmailResults} isPro={isPro} onUpgrade={onShowCapture} session={session} onDealSaved={refreshDeals} />
+                : <FixFlipAnalyzer standards={standards} onScrollToPro={() => {}} onEmailResults={onEmailResults} isPro={isPro} onUpgrade={onShowCapture} session={session} onDealSaved={refreshDeals} />}
+            </>
+          )}
+
+          {/* Saved Deals */}
+          {!dashPanel && pipelineNav === "saved" && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div />
+                <button onClick={() => setPipelineNav("analyzer")} style={{
+                  background: C.green, border: "none", borderRadius: 8,
+                  padding: "10px 20px", color: C.white, fontSize: 13, fontWeight: 700,
+                  cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                  boxShadow: "0 2px 8px rgba(22,163,74,0.3)",
+                }}>+ Analyze New Deal</button>
+              </div>
+              <div className="db-stat-row" style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+                <DashStatCard label="Total Deals" value={deals.length} />
+                <DashStatCard label="Green Verdicts" value={greenDeals} />
+                <DashStatCard label="Best Cash Flow" value={bestHold} />
+              </div>
+              {dealsLoading ? (
+                <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading deals...</div>
+              ) : deals.length === 0 ? (
+                <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
+                  <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>&#128203;</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, marginBottom: 16, lineHeight: 1.5 }}>No deals yet. Analyze your first deal to see it here.</div>
+                  <button onClick={() => setPipelineNav("analyzer")} style={{ background: C.green, border: "none", borderRadius: 8, padding: "10px 20px", color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)" }}>+ Analyze a Deal</button>
+                </div>
+              ) : (
+              <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+                <div className="db-deals-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+                  {["Address", "Type", "Verdict", "Key Metric"].map((h, i) => (
+                    <span key={h} style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", textAlign: i === 3 ? "right" : "left" }}>{h}</span>
+                  ))}
+                </div>
+                {deals.map((d, i) => {
+                  const metric = d.deal_type === "hold" ? (d.cash_flow ? fmtD(d.cash_flow) + "/mo" : "—") : (d.net_profit ? fmtD(d.net_profit) : "—");
+                  const dateStr = d.created_at ? new Date(d.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+                  return (
+                  <div key={d.id} className="db-deal-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", padding: "14px 16px", borderBottom: i < deals.length - 1 ? `1px solid ${C.border}` : "none", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{d.address}</div>
+                      <div style={{ fontSize: 12, color: C.muted }}>{dateStr}</div>
+                    </div>
+                    <span className="db-deal-type" style={{ fontSize: 13, color: C.muted }}>{d.deal_type === "hold" ? "Buy & Hold" : "Fix & Flip"}</span>
+                    <DashVerdictBadge verdict={d.verdict} />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: C.text, textAlign: "right" }}>{metric}</span>
+                  </div>
+                  );
+                })}
+              </div>
+              )}
+            </>
+          )}
+
+          {/* Tools grid */}
+          {!dashPanel && pipelineNav === "tools" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+              {[
+                { name: "Underwriting Worksheet", desc: "Build confidence in your purchase price using comparable sales.", clickable: true },
+                { name: "Rehab Estimator", desc: "Room-by-room cost builder. Stop guessing your rehab budget.", soon: true },
+                { name: "Rent Analysis", desc: "Compare rents for similar properties in your market.", soon: true },
+                { name: "Comp Tracker", desc: "Track comparable sales to build a confident ARV.", soon: true },
+              ].map((tool, i) => (
+                <div key={i} onClick={tool.clickable ? () => setShowWorksheet(true) : undefined} style={{
+                  background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
+                  padding: "20px 18px", cursor: tool.clickable ? "pointer" : "default",
+                  transition: "all 0.15s",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: tool.soon ? C.mutedLight : C.text }}>{tool.name}</div>
+                    {tool.soon && <span style={{ fontSize: 10, fontWeight: 600, color: C.mutedLight, background: C.bg, padding: "3px 8px", borderRadius: 4 }}>Soon</span>}
+                  </div>
+                  <div style={{ fontSize: 13, color: tool.soon ? C.mutedLight : C.muted, lineHeight: 1.5 }}>{tool.desc}</div>
+                  {tool.clickable && <div style={{ fontSize: 12, color: C.green, fontWeight: 700, marginTop: 12 }}>Open Worksheet &#8594;</div>}
+                  {tool.soon && <div style={{ fontSize: 12, color: C.mutedLight, marginTop: 12 }}>Coming soon</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Mobile bottom tab bar */}
+        <div className="db-bottomtab" style={{
+          display: "none", position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200,
+          background: C.white, borderTop: `1px solid ${C.border}`, height: 64,
+          justifyContent: "space-around", alignItems: "center",
+          fontFamily: "'DM Sans', sans-serif",
+        }}>
+          {[
+            { id: "dashboard", label: "Home", icon: "\u{1F3E0}" },
+            { id: "analyzer", label: "Analyzer", icon: "\u{1F4CA}" },
+            { id: "saved", label: "Saved", icon: "\u{1F4CB}" },
+            { id: "more", label: "More", icon: "\u2022\u2022\u2022" },
+          ].map(tab => {
+            const isActive = tab.id === "more" ? showMore : pipelineNav === tab.id;
+            return (
+              <div key={tab.id} onClick={() => {
+                if (tab.id === "more") setShowMore(prev => !prev);
+                else { setShowMore(false); setDashPanel(null); setPipelineNav(tab.id); }
+              }} style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                cursor: "pointer", padding: "6px 16px",
+              }}>
+                <span style={{ fontSize: tab.id === "more" ? 14 : 18, lineHeight: 1, fontWeight: tab.id === "more" ? 900 : 400, color: isActive ? C.green : C.muted }}>{tab.icon}</span>
+                <span style={{ fontSize: 11, fontWeight: isActive ? 700 : 500, color: isActive ? C.green : C.muted }}>{tab.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── PROPERTIES DASHBOARD ───
+  if (view === "properties") {
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg }}>
+        {/* Sidebar */}
+        <div style={sidebarStyle}>
+          <div style={{ padding: "18px 16px 24px" }}><DoorBaseLogo /></div>
+          <div style={{ padding: "0 10px", flex: 1 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.mutedLight, textTransform: "uppercase", letterSpacing: "0.1em", padding: "0 14px 8px", fontFamily: "'DM Sans', sans-serif" }}>Property Tools</div>
+            {PROPERTIES_NAV.map(item => (
+              <SidebarItem
+                key={item.id}
+                label={item.label}
+                active={propertiesNav === item.id && !dashPanel}
+                soon={item.soon}
+                onClick={() => { setDashPanel(null); setPropertiesNav(item.id); }}
+              />
+            ))}
+          </div>
+          <div style={{ padding: "16px" }}>
+            <button onClick={() => setView("home")} style={{
+              width: "100%", padding: "10px", background: C.bg, border: `1px solid ${C.border}`,
+              borderRadius: 8, fontSize: 12, fontWeight: 600, color: C.muted,
+              cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+            }}>Switch Mode</button>
+            <div style={{ height: 1, background: C.border, margin: "12px 0" }} />
+            <div onClick={() => { setDashPanel("settings"); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 6px", borderRadius: 6, cursor: "pointer", color: dashPanel === "settings" ? C.greenDark : C.muted, fontSize: 12, fontWeight: 600 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              Settings
+            </div>
+            <div onClick={() => { setDashPanel("feedback"); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 6px", borderRadius: 6, cursor: "pointer", color: dashPanel === "feedback" ? C.greenDark : C.muted, fontSize: 12, fontWeight: 600 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              Feedback
+            </div>
+          </div>
+        </div>
+
+        {/* Top bar */}
+        <div style={topBarStyle}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: C.text, fontFamily: "'DM Sans', sans-serif" }}>
+            {dashPanel === "settings" ? "Settings" : dashPanel === "feedback" ? "Beta Feedback" : (PROPERTIES_NAV.find(n => n.id === propertiesNav) || {}).label || "Portfolio Overview"}
+          </div>
+          <div style={avatarStyle}>JT</div>
+        </div>
+
+        {/* Main content */}
+        <div style={{ marginLeft: 220, padding: "28px", paddingTop: 84 }}>
+          {dashPanel === "settings" && <DashSettingsPanel standards={standards} onSaveStandards={onSaveStandards} defaultMode={mode} onSetDefaultMode={setMode} onSignOut={onSignOut} />}
+          {dashPanel === "feedback" && <FeedbackPanel />}
+          {!dashPanel && propertiesNav === "dashboard" && (() => {
+            const lateTenants = briefingTenants.filter(t => t.status === "late");
+            const expiring60 = briefingLeases.filter(l => {
+              if (!l.lease_end) return false;
+              const days = Math.round((new Date(l.lease_end) - new Date()) / (24 * 60 * 60 * 1000));
+              return days > 0 && days <= 60;
+            }).map(l => ({ ...l, daysLeft: Math.round((new Date(l.lease_end) - new Date()) / (24 * 60 * 60 * 1000)) }));
+            const balloons12 = briefingLoans.filter(l => {
+              if (!l.maturity_date || !(l.loan_type || "").includes("Balloon")) return false;
+              const days = Math.round((new Date(l.maturity_date) - new Date()) / (24 * 60 * 60 * 1000));
+              return days > 0 && days <= 365;
+            }).map(l => ({ ...l, daysLeft: Math.round((new Date(l.maturity_date) - new Date()) / (24 * 60 * 60 * 1000)) }));
+            return (
+            <>
+              {/* Morning header */}
+              <div style={{ marginBottom: 28 }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 4 }}>Good morning, {firstName}.</div>
+                <div style={{ fontSize: 14, color: C.muted }}>{todayStr}</div>
+              </div>
+
+              {/* Row 1 — Stat cards */}
+              <div className="db-stat-row" style={{ display: "flex", gap: 12, marginBottom: 28 }}>
+                <DashStatCard label="Monthly Rent" value={fmtD(totalRent)} />
+                <DashStatCard label="Cash Flow This Month" value={fmtD(totalCashFlow)} />
+                <div style={{ background: C.white, border: `1px solid ${lateCount > 0 ? C.red + "44" : C.border}`, borderRadius: 12, padding: "18px 16px", flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Late Payments</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: lateCount > 0 ? C.red : C.text }}>{lateCount}</div>
+                </div>
+                <div style={{ background: C.white, border: `1px solid ${openMaintenance > 0 ? C.yellow + "44" : C.border}`, borderRadius: 12, padding: "18px 16px", flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Open Maintenance</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: openMaintenance > 0 ? C.yellow : C.text }}>{openMaintenance}</div>
+                </div>
+              </div>
+
+              {/* Row 2 — Needs Attention */}
+              <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Needs Attention</div>
+              <div className="db-stat-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 28 }}>
+                {/* Late payments */}
+                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.red, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Late Payments</div>
+                  {lateTenants.length === 0 ? (
+                    <div style={{ fontSize: 13, color: C.muted, fontStyle: "italic" }}>All payments current.</div>
+                  ) : lateTenants.map((t, i) => (
+                    <div key={i} style={{ padding: "8px 0", borderBottom: i < lateTenants.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{t.name}</div>
+                      <div style={{ fontSize: 12, color: C.muted }}>{t.property_id}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Expiring leases */}
+                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.yellow, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Leases Expiring in 60 Days</div>
+                  {expiring60.length === 0 ? (
+                    <div style={{ fontSize: 13, color: C.muted, fontStyle: "italic" }}>No leases expiring soon.</div>
+                  ) : expiring60.map((l, i) => (
+                    <div key={i} style={{ padding: "8px 0", borderBottom: i < expiring60.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{l.tenant_name}</div>
+                      <div style={{ fontSize: 12, color: C.muted }}>{l.property_id} — {l.daysLeft}d remaining</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Balloon payments */}
+                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.yellowDark, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Balloon Payments Within 12mo</div>
+                  {balloons12.length === 0 ? (
+                    <div style={{ fontSize: 13, color: C.muted, fontStyle: "italic" }}>No balloon payments due.</div>
+                  ) : balloons12.map((l, i) => (
+                    <div key={i} style={{ padding: "8px 0", borderBottom: i < balloons12.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{l.lender}</div>
+                        <span style={{ background: l.daysLeft <= 90 ? C.redLight : C.yellowLight, color: l.daysLeft <= 90 ? C.red : C.yellowDark, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>{l.daysLeft}d</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: C.muted }}>{l.property_id} — {l.maturity_date}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Row 3 — Portfolio snapshot */}
+              <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Portfolio Snapshot</div>
+              {propsLoading ? (
+                <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading properties...</div>
+              ) : properties.length === 0 ? (
+                <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
+                  <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>&#127968;</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, lineHeight: 1.5 }}>No properties yet. Add your first property to get started.</div>
+                </div>
+              ) : (
+              <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+                {properties.map((p, i) => {
+                  const cf = (p.monthly_rent || 0) - (p.monthly_expenses || 0);
+                  return (
+                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: i < properties.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.address}</div>
+                      <div style={{ fontSize: 12, color: C.muted }}>{fmtD(p.monthly_rent || 0)}/mo rent — {fmtD(cf)}/mo cash flow</div>
+                    </div>
+                    <span style={{
+                      background: p.status === "late" ? C.redLight : C.greenLight,
+                      color: p.status === "late" ? C.red : C.greenDark,
+                      fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 6,
+                      textTransform: "uppercase", letterSpacing: "0.04em",
+                    }}>{p.status === "late" ? "LATE" : "CURRENT"}</span>
+                  </div>
+                  );
+                })}
+              </div>
+              )}
+            </>
+            );
+          })()}
+
+          {!dashPanel && propertiesNav === "overview" && (
+            <>
+              <div className="db-stat-row" style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+                <DashStatCard label="Monthly Rent" value={fmtD(totalRent)} />
+                <DashStatCard label="Cash Flow" value={fmtD(totalCashFlow)} sub="/mo" />
+                <DashStatCard label="Properties" value={properties.length} />
+                <DashStatCard label="Total Doors" value={properties.reduce((s, p) => s + (p.units || 1), 0)} />
+              </div>
+              {propsLoading ? (
+                <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading properties...</div>
+              ) : properties.length === 0 ? (
+                <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
+                  <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>&#127968;</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, lineHeight: 1.5 }}>No properties yet.</div>
+                </div>
+              ) : (
+              <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 0.7fr 1fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+                  {["Address", "Units", "Rent", "Cash Flow", "Status"].map((h, i) => (
+                    <span key={h} style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", textAlign: i === 4 ? "right" : "left" }}>{h}</span>
+                  ))}
+                </div>
+                {properties.map((p, i) => {
+                  const cf = (p.monthly_rent || 0) - (p.monthly_expenses || 0);
+                  return (
+                  <div key={p.id} style={{ display: "grid", gridTemplateColumns: "2fr 0.7fr 1fr 1fr 1fr", padding: "14px 16px", borderBottom: i < properties.length - 1 ? `1px solid ${C.border}` : "none", alignItems: "center" }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.address}</div>
+                    <span style={{ fontSize: 13, color: C.muted }}>{p.units || 1}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{fmtD(p.monthly_rent || 0)}/mo</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: cf >= 0 ? C.green : C.red }}>{fmtD(cf)}/mo</span>
+                    <div style={{ textAlign: "right" }}>
+                      <span style={{
+                        background: p.status === "late" ? C.redLight : C.greenLight,
+                        color: p.status === "late" ? C.red : C.greenDark,
+                        fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 6,
+                        textTransform: "uppercase", letterSpacing: "0.04em",
+                      }}>{p.status === "late" ? "LATE" : "PAID"}</span>
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
+              )}
+            </>
+          )}
+
+          {!dashPanel && propertiesNav === "cashflow" && <CashFlowTracker session={session} />}
+          {!dashPanel && propertiesNav === "tenants" && <TenantTracker session={session} />}
+          {!dashPanel && propertiesNav === "maintenance" && <MaintenanceLog session={session} />}
+          {!dashPanel && propertiesNav === "financing" && <FinancingTracker session={session} />}
+          {!dashPanel && propertiesNav === "leases" && <LeaseRenewalTracker session={session} />}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const [mode, setMode] = useState("hold");
@@ -966,7 +3502,9 @@ export default function App() {
   const [captureResults, setCaptureResults] = useState(null);
   const [emailSource, setEmailSource] = useState('analyzer');
   const [activeTab, setActiveTab] = useState("analyzer");
-  const { isPro, togglePro } = useProAccess();
+  const { session, loading: authLoading, signOut } = useAuth();
+  const [showAuthScreen, setShowAuthScreen] = useState(false);
+  const isPro = !!session;
   const analyzerRef = useRef(null);
   const proRef = useRef(null);
 
@@ -1011,6 +3549,27 @@ export default function App() {
       {showSettings && <SettingsPanel standards={standards} onSave={setStandards} onClose={() => setShowSettings(false)} />}
       {showEmailCapture && <EmailCaptureModal onClose={() => { setShowEmailCapture(false); setEmailSource('analyzer'); }} results={captureResults} mode={mode} source={emailSource} />}
 
+      {authLoading ? (
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.nav }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.white, fontFamily: "'DM Sans', sans-serif" }}>Loading...</div>
+        </div>
+      ) : isPro ? (
+        <Dashboard
+          standards={standards}
+          onSaveStandards={setStandards}
+          onShowSettings={() => setShowSettings(true)}
+          mode={mode}
+          setMode={setMode}
+          isPro={isPro}
+          onShowCapture={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }}
+          onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }}
+          onSignOut={async () => { await signOut(); setShowAuthScreen(false); }}
+          session={session}
+        />
+      ) : showAuthScreen ? (
+        <AuthScreen onBack={() => setShowAuthScreen(false)} />
+      ) : (
+      <>
       {/* ─── NAV ─── */}
       <nav style={{
         background: "#111827",
@@ -1040,11 +3599,11 @@ export default function App() {
             <button onClick={scrollToPro} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "8px 14px", borderRadius: 6 }}>
               Pro Features
             </button>
-            <button onClick={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 7, padding: "8px 16px", color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginLeft: 4 }}>
+            <button onClick={() => setShowAuthScreen(true)} style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 7, padding: "8px 16px", color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginLeft: 4 }}>
               Sign In
             </button>
             <button onClick={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} style={{ background: "#22C55E", border: "none", borderRadius: 7, padding: "8px 16px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginLeft: 6, boxShadow: "0 2px 8px rgba(34,197,94,0.35)" }}>
-              Founding 50 — Claim Your Spot
+              Get Early Access
             </button>
           </div>
         </div>
@@ -1079,13 +3638,13 @@ export default function App() {
                 padding: "16px 28px", color: C.white, fontSize: 16, fontWeight: 700,
                 cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
                 boxShadow: "0 4px 20px rgba(22,163,74,0.45)", transition: "all 0.2s",
-              }}>📊 Analyze a Deal — Free</button>
+              }}>Analyze a Deal — Free</button>
               <button className="hero-btn-secondary" onClick={scrollToPro} style={{
                 background: "rgba(255,255,255,0.12)", border: "1.5px solid rgba(255,255,255,0.5)",
                 borderRadius: 10, padding: "16px 28px", color: C.white, fontSize: 16, fontWeight: 700,
                 cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
                 backdropFilter: "blur(4px)", transition: "all 0.2s",
-              }}>🏠 I Already Own Properties</button>
+              }}>I Already Own Properties</button>
             </div>
           </div>
         </div>
@@ -1104,17 +3663,17 @@ export default function App() {
       </div>
 
       {/* ─── ANALYZER SECTION ─── */}
-      {/* ─── FOUNDING 50 BANNER ─── */}
+      {/* ─── BETA ACCESS BANNER ─── */}
       <div style={{ background: "#fffbeb", borderBottom: "1px solid #fcd34d" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "12px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, color: "#92400e" }}>
-            <strong>Founding 50 Early Access</strong> — {FOUNDING_SPOTS - SPOTS_TAKEN} of {FOUNDING_SPOTS} spots remaining. Pro is free while we build.
+            <strong>Beta Access</strong> — Free while we build.
           </div>
           <button
-            onClick={() => { setCaptureResults(null); setShowEmailCapture(true); }}
+            onClick={() => setShowAuthScreen(true)}
             style={{ background: "#d97706", border: "none", borderRadius: 8, padding: "8px 18px", color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", flexShrink: 0 }}
           >
-            Claim Your Spot
+            Get Early Access
           </button>
         </div>
       </div>
@@ -1150,7 +3709,7 @@ export default function App() {
 
             {mode === "hold"
               ? <BuyHoldAnalyzer standards={standards} onScrollToPro={scrollToPro} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} isPro={isPro} onUpgrade={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} />
-              : <FixFlipAnalyzer standards={standards} onScrollToPro={scrollToPro} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} />}
+              : <FixFlipAnalyzer standards={standards} onScrollToPro={scrollToPro} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} isPro={isPro} onUpgrade={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} />}
           </>
         )}
 
@@ -1250,7 +3809,7 @@ export default function App() {
               padding: "16px 48px", color: C.white, fontSize: 16, fontWeight: 700,
               cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
               boxShadow: "0 4px 20px rgba(22,163,74,0.35)",
-            }}>Start Pro for $19/month →</button>
+            }}>Get Early Access — Free</button>
           </div>
         </div>
       </div>
@@ -1273,8 +3832,9 @@ export default function App() {
           </div>
         </div>
       </footer>
+      </>
+      )}
 
-      <DevProToggle isPro={isPro} onToggle={togglePro} />
     </>
   );
 }
