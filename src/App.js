@@ -1697,8 +1697,8 @@ function CompTrackerSheet({ onClose, onUseARV }) {
 
 // ─── PROPERTY TOOLS ──────────────────────────────────────────────────────────
 
-const _modalOverlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
-const _modalBox = { background: C.white, borderRadius: 16, width: "100%", maxWidth: 520, padding: "28px", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" };
+const _modalOverlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 16px", overflowY: "auto", WebkitOverflowScrolling: "touch" };
+const _modalBox = { background: C.white, borderRadius: 16, width: "100%", maxWidth: 520, padding: "28px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", margin: "auto 0", flexShrink: 0 };
 const _modalHeader = (title, onClose) => (
   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
     <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{title}</div>
@@ -2773,6 +2773,8 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
   const [convertDeal, setConvertDeal] = useState(null); // deal object to convert to property
   const [convertForm, setConvertForm] = useState({ address: "", units: "1", monthlyRent: "", monthlyExpenses: "", loanBalance: "" });
   const [convertSaving, setConvertSaving] = useState(false);
+  const [propModal, setPropModal] = useState(null); // null | { address, units, monthlyRent, monthlyExpenses, loanBalance }
+  const [propSaving, setPropSaving] = useState(false);
 
   const [deals, setDeals] = useState([]);
   const [properties, setProperties] = useState([]);
@@ -2832,6 +2834,25 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
     dbLog("properties.insert(convert)", res);
     setConvertSaving(false);
     setConvertDeal(null);
+    refreshProperties();
+  };
+
+  const openAddProperty = () => setPropModal({ address: "", units: "1", monthlyRent: "", monthlyExpenses: "", loanBalance: "" });
+  const saveProperty = async () => {
+    if (!propModal || !propModal.address) return;
+    setPropSaving(true);
+    const res = await supabase.from("properties").insert({
+      user_id: session.user.id,
+      address: propModal.address,
+      units: parseInt(propModal.units) || 1,
+      monthly_rent: num(propModal.monthlyRent),
+      monthly_expenses: num(propModal.monthlyExpenses),
+      loan_balance: num(propModal.loanBalance),
+      status: "current",
+    }).select().single();
+    dbLog("properties.insert", res);
+    setPropSaving(false);
+    setPropModal(null);
     refreshProperties();
   };
 
@@ -2961,6 +2982,21 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 </div>
               ))}
               <div style={{ height: 1, background: C.border, margin: "8px 0" }} />
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.mutedLight, textTransform: "uppercase", letterSpacing: "0.1em", padding: "10px 0 6px" }}>Switch Mode</div>
+              {[
+                { id: "pipeline", label: "Deal Pipeline" },
+                { id: "properties", label: "My Properties" },
+              ].map(m => (
+                <div key={m.id} onClick={() => { setShowMore(false); setView(m.id); }} style={{
+                  padding: "12px 0", borderBottom: `1px solid ${C.border}`,
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600,
+                }}>
+                  <span>{m.label}</span>
+                  {view === m.id && <span style={{ color: C.green, fontSize: 16 }}>&#10003;</span>}
+                </div>
+              ))}
+              <div style={{ height: 1, background: C.border, margin: "8px 0" }} />
               <div onClick={() => { setShowMore(false); setDashPanel("settings"); }} style={{ padding: "14px 0", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10, cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                 <span>Settings</span>
@@ -3052,6 +3088,11 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
 
         {/* Main content */}
         <div className="db-main" style={{ marginLeft: isMobile ? 0 : 220, padding: isMobile ? '16px' : '28px', paddingTop: isMobile ? 72 : 84, paddingBottom: isMobile ? 84 : undefined }}>
+          {isMobile && !dashPanel && (
+            <div onClick={() => setView("properties")} style={{ fontSize: 12, fontWeight: 600, color: C.green, cursor: "pointer", marginBottom: 12, fontFamily: "'DM Sans', sans-serif" }}>
+              Switch to My Properties &#8594;
+            </div>
+          )}
           {dashPanel === "settings" && <DashSettingsPanel standards={standards} onSaveStandards={onSaveStandards} defaultMode={mode} onSetDefaultMode={setMode} onSignOut={onSignOut} />}
           {dashPanel === "feedback" && <FeedbackPanel />}
           {/* Pipeline Morning Briefing */}
@@ -3336,6 +3377,11 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
 
         {/* Main content */}
         <div className="db-main" style={{ marginLeft: isMobile ? 0 : 220, padding: isMobile ? '16px' : '28px', paddingTop: isMobile ? 72 : 84, paddingBottom: isMobile ? 84 : undefined }}>
+          {isMobile && !dashPanel && (
+            <div onClick={() => setView("pipeline")} style={{ fontSize: 12, fontWeight: 600, color: C.green, cursor: "pointer", marginBottom: 12, fontFamily: "'DM Sans', sans-serif" }}>
+              Switch to Deal Pipeline &#8594;
+            </div>
+          )}
           {dashPanel === "settings" && <DashSettingsPanel standards={standards} onSaveStandards={onSaveStandards} defaultMode={mode} onSetDefaultMode={setMode} onSignOut={onSignOut} />}
           {dashPanel === "feedback" && <FeedbackPanel />}
           {!dashPanel && propertiesNav === "dashboard" && (() => {
@@ -3452,6 +3498,25 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
 
           {!dashPanel && propertiesNav === "overview" && (
             <>
+              {propModal && (
+                <div style={_modalOverlay}><div style={_modalBox}>
+                  {_modalHeader(propModal.editing ? "Edit Property" : "Add Property", () => setPropModal(null))}
+                  <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Address</label><input value={propModal.address} onChange={e => setPropModal(p => ({ ...p, address: e.target.value }))} placeholder="123 Main St" style={_modalInput} /></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                    <div><label style={_modalLabel}>Units</label><input type="number" value={propModal.units} onChange={e => setPropModal(p => ({ ...p, units: e.target.value }))} style={_modalInput} /></div>
+                    <div><label style={_modalLabel}>Monthly Rent</label><input type="number" value={propModal.monthlyRent} onChange={e => setPropModal(p => ({ ...p, monthlyRent: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                    <div><label style={_modalLabel}>Monthly Expenses</label><input type="number" value={propModal.monthlyExpenses} onChange={e => setPropModal(p => ({ ...p, monthlyExpenses: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+                    <div><label style={_modalLabel}>Loan Balance</label><input type="number" value={propModal.loanBalance} onChange={e => setPropModal(p => ({ ...p, loanBalance: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+                  </div>
+                  <button onClick={saveProperty} disabled={propSaving} style={{ ..._modalSubmit(), opacity: propSaving ? 0.7 : 1 }}>{propSaving ? "Saving..." : "Add Property"}</button>
+                </div></div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div />
+                <button onClick={openAddProperty} style={_addBtn}>+ Add Property</button>
+              </div>
               <div className="db-stat-row" style={{ display: "flex", gap: 12, marginBottom: 24 }}>
                 <DashStatCard label="Monthly Rent" value={fmtD(totalRent)} />
                 <DashStatCard label="Cash Flow" value={fmtD(totalCashFlow)} sub="/mo" />
@@ -3464,6 +3529,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
                   <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>&#127968;</div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, lineHeight: 1.5 }}>No properties yet.</div>
+                  <button onClick={openAddProperty} style={{ ...(_addBtn), marginTop: 16 }}>+ Add Property</button>
                 </div>
               ) : (
               <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
@@ -3556,6 +3622,21 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                   cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600,
                 }}>
                   {item.label}
+                </div>
+              ))}
+              <div style={{ height: 1, background: C.border, margin: "8px 0" }} />
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.mutedLight, textTransform: "uppercase", letterSpacing: "0.1em", padding: "10px 0 6px" }}>Switch Mode</div>
+              {[
+                { id: "pipeline", label: "Deal Pipeline" },
+                { id: "properties", label: "My Properties" },
+              ].map(m => (
+                <div key={m.id} onClick={() => { setShowMore(false); setView(m.id); }} style={{
+                  padding: "12px 0", borderBottom: `1px solid ${C.border}`,
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600,
+                }}>
+                  <span>{m.label}</span>
+                  {view === m.id && <span style={{ color: C.green, fontSize: 16 }}>&#10003;</span>}
                 </div>
               ))}
               <div style={{ height: 1, background: C.border, margin: "8px 0" }} />
