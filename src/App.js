@@ -2820,7 +2820,6 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
 
   const greenDeals = deals.filter(d => d.verdict === "green").length;
   const yellowDeals = deals.filter(d => d.verdict === "yellow").length;
-  const redDeals = deals.filter(d => d.verdict === "red").length;
 
   const totalRent = properties.reduce((s, p) => s + (p.monthly_rent || 0), 0);
   const totalCashFlow = properties.reduce((s, p) => s + ((p.monthly_rent || 0) - (p.monthly_expenses || 0)), 0);
