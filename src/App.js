@@ -2786,6 +2786,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
   const [briefingMaintenance, setBriefingMaintenance] = useState([]);
 
   const firstName = session?.user?.email ? session.user.email.split("@")[0].replace(/[^a-zA-Z]/g, " ").split(" ")[0].charAt(0).toUpperCase() + session.user.email.split("@")[0].replace(/[^a-zA-Z]/g, " ").split(" ")[0].slice(1) : "there";
+  const userInitials = session?.user?.email ? session.user.email.split("@")[0].replace(/[^a-zA-Z]/g, " ").trim().split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2) || "U" : "U";
   const todayStr = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
   const refreshAll = useCallback(() => {
@@ -2901,7 +2902,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 <span style={{ fontSize: 20, fontWeight: 800, color: "#22C55E", fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em", lineHeight: 1 }}>Base</span>
               </div>
             </div>
-            <div style={avatarStyle}>JT</div>
+            <div onClick={() => { setView("pipeline"); setDashPanel("settings"); }} style={{ ...avatarStyle, cursor: "pointer" }}>{userInitials}</div>
           </div>
         </nav>
 
@@ -3062,7 +3063,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 justifyContent: "center", cursor: "pointer", fontSize: 14,
               }}>⚙️</button>
             )}
-            <div style={avatarStyle}>JT</div>
+            <div onClick={() => setDashPanel(dashPanel === "settings" ? null : "settings")} style={{ ...avatarStyle, cursor: "pointer" }}>{userInitials}</div>
           </div>
         </div>
 
@@ -3372,7 +3373,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           <div style={{ fontSize: 18, fontWeight: 800, color: C.text, fontFamily: "'DM Sans', sans-serif" }}>
             {dashPanel === "settings" ? "Settings" : dashPanel === "feedback" ? "Beta Feedback" : (PROPERTIES_NAV.find(n => n.id === propertiesNav) || {}).label || "Portfolio Overview"}
           </div>
-          <div style={avatarStyle}>JT</div>
+          <div onClick={() => setDashPanel(dashPanel === "settings" ? null : "settings")} style={{ ...avatarStyle, cursor: "pointer" }}>{userInitials}</div>
         </div>
 
         {/* Main content */}
@@ -3666,30 +3667,14 @@ export default function App() {
   const [showEmailCapture, setShowEmailCapture] = useState(false);
   const [captureResults, setCaptureResults] = useState(null);
   const [emailSource, setEmailSource] = useState('analyzer');
-  const [activeTab, setActiveTab] = useState("analyzer");
   const { session, loading: authLoading, signOut } = useAuth();
   const [showAuthScreen, setShowAuthScreen] = useState(false);
   const isPro = !!session;
   const analyzerRef = useRef(null);
-  const proRef = useRef(null);
+  const whatsInsideRef = useRef(null);
 
   const scrollToAnalyzer = () => analyzerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  const scrollToPro = () => proRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-
-  const proFeatures = [
-    { icon: "🔨", title: "Rehab Estimator", desc: "Room-by-room cost builder. Stop guessing your rehab budget." },
-    { icon: "📋", title: "Inspection Checklists", desc: "Pre-purchase, move-out, and preventative maintenance — all on your phone." },
-    { icon: "🏠", title: "Portfolio Dashboard", desc: "Every door at a glance. Cash flow, vacancy, and performance." },
-    { icon: "👤", title: "Tenant Tracker", desc: "Lease dates, rent history, contact info, and late payment log per unit." },
-    { icon: "🔧", title: "Maintenance Log", desc: "Log issues in the field. Full paper trail with vendor, cost, and status." },
-    { icon: "📊", title: "Deal Pipeline", desc: "Save and compare every deal you analyze. Side-by-side verdicts." },
-    { icon: "💰", title: "Cash Flow Tracker", desc: "Actual vs projected, month over month. Know if your properties perform." },
-    { icon: "🤖", title: "AI Advisor", desc: "Built-in deal advisor. No opinions — just your numbers, explained." },
-    { icon: "📄", title: "Tax Summary", desc: "Annual income and expenses formatted for your CPA." },
-    { icon: "🏦", title: "Financing Tracker", desc: "Every loan tracked — balance, rate, maturity, and balloon alerts." },
-    { icon: "🔄", title: "Lease Renewal Tracker", desc: "Never miss a renewal window. Know who's up and when." },
-    { icon: "📁", title: "Document Storage", desc: "Leases, inspections, insurance, closing docs — organized per property." },
-  ];
+  const scrollToWhatsInside = () => whatsInsideRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
     <>
@@ -3721,8 +3706,11 @@ export default function App() {
           .db-deal-type { display: none !important; }
           .home-picker-grid { grid-template-columns: 1fr !important; }
           .landing-intro-grid { grid-template-columns: 1fr !important; }
-          .landing-feature-grid { grid-template-columns: 1fr 1fr !important; }
-          .landing-hero-title { font-size: 24px !important; }
+          .landing-feature-grid { grid-template-columns: 1fr !important; }
+          .landing-hero-title { font-size: 28px !important; }
+          .landing-hero-btns { flex-direction: column !important; }
+          .landing-hero-btns button { width: 100% !important; text-align: center !important; }
+          .landing-nav-links button:not(:last-child):not(:nth-last-child(2)) { display: none !important; }
           .db-prop-header { display: none !important; }
           .db-prop-row { grid-template-columns: 1fr auto !important; }
           .db-prop-row > span:nth-child(2),
@@ -3765,7 +3753,7 @@ export default function App() {
         position: "sticky", top: 0, zIndex: 100,
         boxShadow: "0 1px 0 rgba(255,255,255,0.06)",
       }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 32px", height: 62, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="landing-nav-inner" style={{ maxWidth: 1200, margin: "0 auto", padding: "0 32px", height: 62, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
               <path d="M8 34 L8 8 L28 8 L28 34" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
@@ -3778,21 +3766,18 @@ export default function App() {
               <span style={{ fontSize: 20, fontWeight: 800, color: "#22C55E", fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em", lineHeight: 1 }}>Base</span>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <button onClick={() => { setActiveTab("analyzer"); scrollToAnalyzer(); }} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: activeTab === "analyzer" ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "8px 14px", borderRadius: 6 }}>
+          <div className="landing-nav-links" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button onClick={scrollToWhatsInside} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "8px 14px", borderRadius: 6 }}>
+              Features
+            </button>
+            <button onClick={scrollToAnalyzer} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "8px 14px", borderRadius: 6 }}>
               Deal Analyzer
-            </button>
-            <button onClick={() => { setActiveTab("pipeline"); scrollToAnalyzer(); }} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: activeTab === "pipeline" ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "8px 14px", borderRadius: 6 }}>
-              Deal Pipeline
-            </button>
-            <button onClick={scrollToPro} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "8px 14px", borderRadius: 6 }}>
-              Pro Features
             </button>
             <button onClick={() => setShowAuthScreen(true)} style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 7, padding: "8px 16px", color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginLeft: 4 }}>
               Sign In
             </button>
-            <button onClick={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} style={{ background: "#22C55E", border: "none", borderRadius: 7, padding: "8px 16px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginLeft: 6, boxShadow: "0 2px 8px rgba(34,197,94,0.35)" }}>
-              Get Early Access
+            <button onClick={() => setShowAuthScreen(true)} style={{ background: "#22C55E", border: "none", borderRadius: 7, padding: "8px 16px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginLeft: 6, boxShadow: "0 2px 8px rgba(34,197,94,0.35)" }}>
+              Join Beta
             </button>
           </div>
         </div>
@@ -3808,32 +3793,32 @@ export default function App() {
       }}>
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(105deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.45) 55%, rgba(0,0,0,0.2) 100%)" }} />
         <div style={{ position: "relative", zIndex: 1, maxWidth: 1200, margin: "0 auto", padding: "80px 32px", width: "100%" }}>
-          <div style={{ maxWidth: 560 }}>
+          <div style={{ maxWidth: 600 }}>
             <div style={{
               display: "inline-block", background: "rgba(22,163,74,0.9)", borderRadius: 6,
               padding: "4px 12px", fontSize: 11, fontWeight: 700, color: C.white,
               letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 20,
-            }}>Free to use · No account required</div>
-            <h1 style={{ fontSize: 48, fontWeight: 800, color: C.white, lineHeight: 1.1, marginBottom: 16, letterSpacing: "-0.02em" }}>
-              Every door you own.<br />
-              <span style={{ color: "#4ade80" }}>One place to run it.</span>
+            }}>Free during beta</div>
+            <h1 className="landing-hero-title" style={{ fontSize: 48, fontWeight: 800, color: C.white, lineHeight: 1.1, marginBottom: 16, letterSpacing: "-0.02em" }}>
+              The Operating System<br />
+              <span style={{ color: "#4ade80" }}>for Small Investors.</span>
             </h1>
-            <p style={{ fontSize: 18, color: "rgba(255,255,255,0.85)", lineHeight: 1.65, marginBottom: 32, maxWidth: 480 }}>
-              Analyze new deals in 30 seconds. Manage what you already own. Built for investors with 1–10 doors who need more than a spreadsheet.
+            <p style={{ fontSize: 18, color: "rgba(255,255,255,0.85)", lineHeight: 1.65, marginBottom: 32, maxWidth: 500 }}>
+              Analyze deals. Manage your portfolio. Run your rehabs. All in one place.
             </p>
-            <div style={{ display: "flex", gap: 12 }}>
-              <button className="hero-btn-primary" onClick={scrollToAnalyzer} style={{
+            <div className="landing-hero-btns" style={{ display: "flex", gap: 12 }}>
+              <button className="hero-btn-primary" onClick={() => setShowAuthScreen(true)} style={{
                 background: C.green, border: "none", borderRadius: 10,
                 padding: "16px 28px", color: C.white, fontSize: 16, fontWeight: 700,
                 cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
                 boxShadow: "0 4px 20px rgba(22,163,74,0.45)", transition: "all 0.2s",
-              }}>Analyze a Deal — Free</button>
-              <button className="hero-btn-secondary" onClick={scrollToPro} style={{
+              }}>Start Free — Join Beta</button>
+              <button className="hero-btn-secondary" onClick={scrollToWhatsInside} style={{
                 background: "rgba(255,255,255,0.12)", border: "1.5px solid rgba(255,255,255,0.5)",
                 borderRadius: 10, padding: "16px 28px", color: C.white, fontSize: 16, fontWeight: 700,
                 cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
                 backdropFilter: "blur(4px)", transition: "all 0.2s",
-              }}>I Already Own Properties</button>
+              }}>See What's Inside</button>
             </div>
           </div>
         </div>
@@ -3841,8 +3826,8 @@ export default function App() {
 
       {/* ─── TRUST STRIP ─── */}
       <div style={{ background: C.white, borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "14px 32px", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {["Buy & Hold + Fix & Flip", "Set Your Own Deal Standards", "Free Forever — No Credit Card", "Pro Tools at $19/mo", "Mobile App Coming Soon"].map((item, i) => (
+        <div className="landing-trust-strip" style={{ maxWidth: 1200, margin: "0 auto", padding: "14px 32px", display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+          {["Buy & Hold + Fix & Flip", "Portfolio Dashboard", "Tenant & Lease Tracking", "Active Rehab Management", "Free During Beta"].map((item, i) => (
             <div key={i} style={{
               background: C.bg, borderRadius: 20, padding: "6px 14px",
               fontSize: 12, fontWeight: 600, color: C.muted, border: `1px solid ${C.border}`,
@@ -3851,155 +3836,111 @@ export default function App() {
         </div>
       </div>
 
-      {/* ─── ANALYZER SECTION ─── */}
-      {/* ─── BETA ACCESS BANNER ─── */}
-      <div style={{ background: "#fffbeb", borderBottom: "1px solid #fcd34d" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "12px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 13, color: "#92400e" }}>
-            <strong>Beta Access</strong> — Free while we build.
+      {/* ─── WHAT'S INSIDE ─── */}
+      <div ref={whatsInsideRef} style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "64px 32px" }}>
+          <div style={{ textAlign: "center", marginBottom: 40 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>What's Inside</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: C.text, lineHeight: 1.25, marginBottom: 8 }}>Everything you need to run your doors.</div>
+            <div style={{ fontSize: 15, color: C.muted, maxWidth: 520, margin: "0 auto" }}>All live now. Free during beta. No credit card required.</div>
           </div>
-          <button
-            onClick={() => setShowAuthScreen(true)}
-            style={{ background: "#d97706", border: "none", borderRadius: 8, padding: "8px 18px", color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", flexShrink: 0 }}
-          >
-            Get Early Access
-          </button>
-        </div>
-      </div>
-
-      <div ref={analyzerRef} style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 32px" }}>
-        {activeTab === "analyzer" && (
-          <>
-            <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 4 }}>Deal Analyzer</div>
-                <div style={{ fontSize: 15, color: C.muted }}>Free. No account needed. Get a verdict in under a minute.</div>
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <div style={{ display: "flex", background: C.white, borderRadius: 8, padding: 3, gap: 3, border: `1px solid ${C.border}` }}>
-                  {[{ id: "hold", label: "Buy & Hold" }, { id: "flip", label: "Fix & Flip" }].map(m => (
-                    <button key={m.id} onClick={() => setMode(m.id)} style={{
-                      padding: "8px 20px", borderRadius: 6, border: "none",
-                      background: mode === m.id ? C.green : "transparent",
-                      color: mode === m.id ? C.white : C.muted,
-                      fontWeight: mode === m.id ? 700 : 500,
-                      fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                      transition: "all 0.15s",
-                    }}>{m.label}</button>
-                  ))}
-                </div>
-                <button onClick={() => setShowSettings(true)} style={{
-                  background: C.white, border: `1px solid ${C.border}`, borderRadius: 8,
-                  width: 40, height: 40, display: "flex", alignItems: "center",
-                  justifyContent: "center", cursor: "pointer", fontSize: 16,
-                }}>⚙️</button>
-              </div>
-            </div>
-
-            {mode === "hold"
-              ? <BuyHoldAnalyzer standards={standards} onScrollToPro={scrollToPro} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} isPro={isPro} onUpgrade={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} />
-              : <FixFlipAnalyzer standards={standards} onScrollToPro={scrollToPro} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} isPro={isPro} onUpgrade={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} />}
-          </>
-        )}
-
-        {activeTab === "pipeline" && (
-          <>
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 4 }}>Deal Pipeline</div>
-              <div style={{ fontSize: 15, color: C.muted }}>Save, compare, and track every deal you analyze.</div>
-            </div>
-            <ProGate
-              isPro={isPro}
-              title="Deal Pipeline"
-              description="Save every deal you analyze. Compare side by side. Track your pipeline from lead to close."
-              onUpgrade={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }}
-            >
-              <DealPipeline />
-            </ProGate>
-          </>
-        )}
-      </div>
-
-      {/* ─── PRO SECTION ─── */}
-      <div ref={proRef} style={{ background: C.white, borderTop: `3px solid ${C.green}` }}>
-
-        {/* Problem image hero */}
-        <div style={{ position: "relative", height: 320 }}>
-          <img src={DESK_IMG} alt="Managing rental properties with spreadsheets"
-            style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 40%" }} />
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to right, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.1) 100%)" }} />
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center" }}>
-            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 32px", width: "100%" }}>
-              <div style={{ maxWidth: 500 }}>
-                <div className="landing-hero-title" style={{ fontSize: 36, fontWeight: 800, color: C.white, lineHeight: 1.2, marginBottom: 12 }}>
-                  Still running your portfolio out of spreadsheets?
-                </div>
-                <div style={{ fontSize: 16, color: "rgba(255,255,255,0.8)", lineHeight: 1.6 }}>
-                  You built real wealth buying doors. Now manage it the right way.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "56px 32px" }}>
-
-          {/* Intro copy + price side by side */}
-          <div className="landing-intro-grid" style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 48, marginBottom: 56, alignItems: "start" }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>DoorBase Pro</div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: C.text, lineHeight: 1.25, marginBottom: 16 }}>
-                The operating system for small real estate investors.
-              </div>
-              <div style={{ fontSize: 16, color: C.muted, lineHeight: 1.75, marginBottom: 24 }}>
-                You bought your first door because you saw how real estate builds wealth. Now you've got three, maybe five. Tenants texting you at 9pm. Lease renewals you're tracking in your head. Maintenance jobs that fall through the cracks.
-              </div>
-              <div style={{ fontSize: 16, color: C.muted, lineHeight: 1.75 }}>
-                DoorBase Pro gives you one place to run it all — from the deal you're looking at today to the portfolio you're building for the next decade. On your desktop when you're at the desk. On your phone when you're in the field.
-              </div>
-            </div>
-
-            <div style={{ background: "linear-gradient(135deg, #15803d, #16a34a)", borderRadius: 16, padding: "32px 28px", textAlign: "center", boxShadow: "0 8px 32px rgba(22,163,74,0.25)" }}>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>DoorBase Pro</div>
-              <div style={{ fontSize: 56, fontWeight: 800, color: C.white, lineHeight: 1 }}>$19</div>
-              <div style={{ fontSize: 16, color: "rgba(255,255,255,0.75)", marginBottom: 6 }}>per month</div>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", marginBottom: 28, lineHeight: 1.5 }}>
-                One subscription unlocks everything — web app and mobile app.
-              </div>
-              <button onClick={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} style={{
-                width: "100%", padding: "15px", background: C.white, border: "none",
-                borderRadius: 10, fontSize: 15, fontWeight: 700, color: C.green,
-                cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginBottom: 12,
-              }}>Get Started with Pro</button>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
-                Less than AppFolio. Less than Buildium.<br />Built for 1–10 doors.
-              </div>
-            </div>
-          </div>
-
-          {/* Feature grid */}
-          <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 20 }}>Everything included in Pro</div>
-          <div className="landing-feature-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 40 }}>
-            {proFeatures.map((f, i) => (
+          <div className="landing-feature-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 40 }}>
+            {[
+              { title: "Deal Analyzer", desc: "Buy & Hold or Fix & Flip — get a verdict in under a minute.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> },
+              { title: "Portfolio Dashboard", desc: "Every door at a glance — rent, cash flow, vacancy, and performance.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
+              { title: "Tenant Tracker", desc: "Lease dates, rent status, contact info, and late payment history per unit.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> },
+              { title: "Financing Tracker", desc: "Every loan tracked — balance, rate, maturity date, and balloon alerts.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> },
+              { title: "Lease Renewals", desc: "Never miss a renewal window. Know who's up and when.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
+              { title: "Cash Flow Tracker", desc: "Actual vs projected, month over month. Know if your properties perform.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
+            ].map((f, i) => (
               <div key={i} className="pro-card" style={{
-                background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12,
-                padding: "18px 16px", transition: "all 0.2s", cursor: "default",
+                background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
+                padding: "24px 20px", transition: "all 0.2s", cursor: "default",
               }}>
-                <div style={{ fontSize: 24, marginBottom: 10 }}>{f.icon}</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 }}>{f.title}</div>
-                <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>{f.desc}</div>
+                <div style={{ marginBottom: 14, width: 44, height: 44, borderRadius: 10, background: C.greenLight, display: "flex", alignItems: "center", justifyContent: "center" }}>{f.icon}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>{f.title}</div>
+                <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>{f.desc}</div>
               </div>
             ))}
           </div>
-
           <div style={{ textAlign: "center" }}>
-            <button onClick={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }} style={{
-              background: C.green, border: "none", borderRadius: 12,
-              padding: "16px 48px", color: C.white, fontSize: 16, fontWeight: 700,
+            <button onClick={() => setShowAuthScreen(true)} style={{
+              background: C.green, border: "none", borderRadius: 10,
+              padding: "14px 36px", color: C.white, fontSize: 15, fontWeight: 700,
               cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
               boxShadow: "0 4px 20px rgba(22,163,74,0.35)",
-            }}>Get Early Access — Free</button>
+            }}>Start Free — Join Beta</button>
           </div>
+        </div>
+      </div>
+
+      {/* ─── INVESTOR FIELD IMAGE ─── */}
+      <div style={{
+        position: "relative", minHeight: 400, display: "flex", alignItems: "center", justifyContent: "center",
+        backgroundImage: "url(/investor-field.png)", backgroundSize: "cover", backgroundPosition: "center",
+      }}>
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.55) 50%, rgba(0,0,0,0.7) 100%)" }} />
+        <div style={{ position: "relative", zIndex: 1, textAlign: "center", padding: "64px 32px", maxWidth: 640 }}>
+          <div style={{ fontSize: 32, fontWeight: 800, color: C.white, lineHeight: 1.2, marginBottom: 14 }}>
+            Built for the Investor in the Field
+          </div>
+          <div style={{ fontSize: 16, color: "rgba(255,255,255,0.85)", lineHeight: 1.65, marginBottom: 28 }}>
+            Your entire portfolio in your pocket. Analyze deals, manage tenants, and run rehabs from anywhere.
+          </div>
+          <button onClick={() => setShowAuthScreen(true)} style={{
+            background: C.green, border: "none", borderRadius: 10,
+            padding: "14px 32px", color: C.white, fontSize: 15, fontWeight: 700,
+            cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+            boxShadow: "0 4px 20px rgba(22,163,74,0.45)",
+          }}>Join Beta Free</button>
+        </div>
+      </div>
+
+      {/* ─── ROADMAP ─── */}
+      <div style={{ background: C.white, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "64px 32px" }}>
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 8 }}>Where We're Going</div>
+            <div style={{ fontSize: 15, color: C.muted }}>What's live, what's next, and what's on the horizon.</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <img src="/roadmap.png" alt="DoorBase Roadmap" style={{ width: "100%", maxWidth: 960, borderRadius: 12, border: `1px solid ${C.border}` }} />
+          </div>
+        </div>
+      </div>
+
+      {/* ─── DEAL ANALYZER ─── */}
+      <div ref={analyzerRef} style={{ background: "#F0FDF4" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "64px 32px" }}>
+          <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginBottom: 4 }}>Try It Free — No Account Required</div>
+              <div style={{ fontSize: 15, color: C.muted }}>Run a deal through the analyzer right now. Get a verdict in under a minute.</div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ display: "flex", background: C.white, borderRadius: 8, padding: 3, gap: 3, border: `1px solid ${C.border}` }}>
+                {[{ id: "hold", label: "Buy & Hold" }, { id: "flip", label: "Fix & Flip" }].map(m => (
+                  <button key={m.id} onClick={() => setMode(m.id)} style={{
+                    padding: "8px 20px", borderRadius: 6, border: "none",
+                    background: mode === m.id ? C.green : "transparent",
+                    color: mode === m.id ? C.white : C.muted,
+                    fontWeight: mode === m.id ? 700 : 500,
+                    fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                    transition: "all 0.15s",
+                  }}>{m.label}</button>
+                ))}
+              </div>
+              <button onClick={() => setShowSettings(true)} style={{
+                background: C.white, border: `1px solid ${C.border}`, borderRadius: 8,
+                width: 40, height: 40, display: "flex", alignItems: "center",
+                justifyContent: "center", cursor: "pointer", fontSize: 16,
+              }}>&#9881;&#65039;</button>
+            </div>
+          </div>
+
+          {mode === "hold"
+            ? <BuyHoldAnalyzer standards={standards} onScrollToPro={() => setShowAuthScreen(true)} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} isPro={isPro} onUpgrade={() => setShowAuthScreen(true)} />
+            : <FixFlipAnalyzer standards={standards} onScrollToPro={() => setShowAuthScreen(true)} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} isPro={isPro} onUpgrade={() => setShowAuthScreen(true)} />}
         </div>
       </div>
 
@@ -4014,10 +3955,13 @@ export default function App() {
               Powered by The Legacy Bridge
             </div>
           </div>
-          <div style={{ display: "flex", gap: 24 }}>
-            {["Privacy Policy", "Terms of Service", "Contact"].map((link, i) => (
-              <span key={i} style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", cursor: "pointer" }}>{link}</span>
-            ))}
+          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>doorbase.app</span>
+            <button onClick={() => setShowAuthScreen(true)} style={{
+              background: C.green, border: "none", borderRadius: 7, padding: "8px 18px",
+              color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(34,197,94,0.3)",
+            }}>Sign Up Free</button>
           </div>
         </div>
       </footer>
