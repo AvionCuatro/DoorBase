@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { Home, Users, DollarSign, Calendar, Wrench, TrendingUp, BarChart3, Building2, BookOpen, FileText, ClipboardList, Calculator, Search, Star, AlertTriangle, Check, X, ChevronRight, ArrowLeft, ArrowRight, Settings, MessageSquare, MoreHorizontal } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 // IMPORTANT: Replace anon key below with your real Supabase anon key (starts with eyJ...)
 // Find it at: Supabase Dashboard → Settings → API → Project API keys → anon / public
@@ -194,7 +196,7 @@ function AuthScreen({ onBack }) {
 
         <div style={{ marginTop: 24 }}>
           <span onClick={onBack} style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", cursor: "pointer" }}>
-            &#8592; Back to site
+            <ArrowLeft size={12} style={{ marginRight: 4 }} /> Back to site
           </span>
         </div>
       </div>
@@ -1370,7 +1372,7 @@ function RentAnalysisWorksheet({ onClose, onUseRent }) {
       <div style={bx} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>Rent Analysis Worksheet</div>
-          <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}>&#10005;</button>
+          <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}><X size={16} /></button>
         </div>
 
         <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Subject Property</div>
@@ -1515,7 +1517,7 @@ function CompTrackerSheet({ onClose, onUseARV }) {
       <div style={bx} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>Comp Tracker / ARV Sheet</div>
-          <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}>&#10005;</button>
+          <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}><X size={16} /></button>
         </div>
 
         <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Subject Property</div>
@@ -1626,7 +1628,7 @@ const _modalBox = { background: C.white, borderRadius: 16, width: "100%", maxWid
 const _modalHeader = (title, onClose) => (
   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
     <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{title}</div>
-    <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}>&#10005;</button>
+    <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: C.muted, flexShrink: 0 }}><X size={16} /></button>
   </div>
 );
 const _modalInput = { width: "100%", padding: "10px 12px", background: C.inputBg, border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 14, color: C.text, fontFamily: "'DM Sans', sans-serif", outline: "none", boxSizing: "border-box" };
@@ -1636,7 +1638,7 @@ const _addBtn = { background: C.green, border: "none", borderRadius: 8, padding:
 const _editBtn = { background: "none", border: "none", fontSize: 11, fontWeight: 600, color: C.mutedLight, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "2px 6px" };
 const _emptyState = (msg, btnLabel, onClick) => (
   <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
-    <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>&#128203;</div>
+    <div style={{ marginBottom: 12, opacity: 0.3, display: "flex", justifyContent: "center" }}><ClipboardList size={36} color={C.green} /></div>
     <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, marginBottom: 16, lineHeight: 1.5 }}>{msg}</div>
     <button onClick={onClick} style={_addBtn}>{btnLabel}</button>
   </div>
@@ -1722,6 +1724,42 @@ function CashFlowTracker({ session }) {
         {monthlyTotals.length > 0 && <DashStatCard label="Best Month" value={monthlyTotals.reduce((b, m) => m.actual > b.actual ? m : b).month} sub={` (${fmtD(monthlyTotals.reduce((b, m) => m.actual > b.actual ? m : b).actual)})`} />}
         {monthlyTotals.length > 0 && <DashStatCard label="Worst Month" value={monthlyTotals.reduce((w, m) => m.actual < w.actual ? m : w).month} sub={` (${fmtD(monthlyTotals.reduce((w, m) => m.actual < w.actual ? m : w).actual)})`} />}
       </div>
+
+      {monthlyTotals.length > 1 && (
+        <div style={{ background: "#111827", borderRadius: 14, padding: "24px 20px", marginBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <TrendingUp size={18} color="#22C55E" />
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#F8FAFC", fontFamily: "'DM Sans', sans-serif" }}>Cash Flow Trend</span>
+            </div>
+            <div style={{ display: "flex", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ width: 10, height: 3, borderRadius: 2, background: "#22C55E" }} /><span style={{ fontSize: 11, color: "#9CA3AF" }}>Actual</span></div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ width: 10, height: 3, borderRadius: 2, background: "#374151" }} /><span style={{ fontSize: 11, color: "#9CA3AF" }}>Projected</span></div>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={[...monthlyTotals].reverse()} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
+              <defs>
+                <linearGradient id="cfGreen" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#22C55E" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#22C55E" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => "$" + (v >= 1000 ? (v / 1000).toFixed(0) + "k" : v)} />
+              <Tooltip
+                contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}
+                labelStyle={{ color: "#9CA3AF", fontWeight: 600 }}
+                itemStyle={{ color: "#F8FAFC" }}
+                formatter={(value) => ["$" + fmt(value)]}
+              />
+              <Area type="monotone" dataKey="projected" stroke="#374151" strokeWidth={2} fill="none" dot={false} />
+              <Area type="monotone" dataKey="actual" stroke="#22C55E" strokeWidth={2.5} fill="url(#cfGreen)" dot={{ fill: "#22C55E", r: 3, strokeWidth: 0 }} style={{ filter: "drop-shadow(0 0 6px rgba(34,197,94,0.5))" }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
         <div style={{ ...rowStyle, borderBottom: `1px solid ${C.border}`, background: C.bg }}>
@@ -2019,13 +2057,13 @@ function FinancingTracker({ session }) {
 
       {criticalBalloon.length > 0 && (
         <div style={{ background: C.redLight, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-          <span style={{ fontSize: 18 }}>&#9888;&#65039;</span>
+          <AlertTriangle size={18} color="currentColor" />
           <div style={{ fontSize: 13, color: C.red, lineHeight: 1.5, fontWeight: 600 }}>{criticalBalloon.length} balloon loan{criticalBalloon.length > 1 ? "s" : ""} maturing within 90 days: {criticalBalloon.map(l => l.property).join(", ")}</div>
         </div>
       )}
       {nearBalloon.length > 0 && criticalBalloon.length < nearBalloon.length && (
         <div style={{ background: C.yellowLight, border: `1px solid ${C.yellow}44`, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <span style={{ fontSize: 18 }}>&#9888;&#65039;</span>
+          <AlertTriangle size={18} color="currentColor" />
           <div style={{ fontSize: 13, color: C.yellowDark, lineHeight: 1.5, fontWeight: 600 }}>{nearBalloon.length - criticalBalloon.length} balloon loan{nearBalloon.length - criticalBalloon.length > 1 ? "s" : ""} maturing within 12 months: {nearBalloon.filter(l => !criticalBalloon.includes(l)).map(l => l.property).join(", ")}</div>
         </div>
       )}
@@ -2345,10 +2383,30 @@ function MaintenanceLog({ session }) {
 function DashSettingsPanel({ standards, onSaveStandards, defaultMode, onSetDefaultMode, onSignOut }) {
   const [name, setName] = useState(() => { try { return localStorage.getItem("doorbase_profile_name") || ""; } catch { return ""; } });
   const [email, setEmail] = useState(() => { try { return localStorage.getItem("doorbase_profile_email") || ""; } catch { return ""; } });
+  const [photo, setPhoto] = useState(() => { try { return localStorage.getItem("doorbase_profile_photo") || ""; } catch { return ""; } });
   const [s, setS] = useState(JSON.parse(JSON.stringify(standards)));
   const [saved, setSaved] = useState(false);
+  const photoInputRef = useRef(null);
 
   const sh = (section, key) => (v) => setS(prev => ({ ...prev, [section]: { ...prev[section], [key]: parseFloat(v) || 0 } }));
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      setPhoto(dataUrl);
+      try { localStorage.setItem("doorbase_profile_photo", dataUrl); } catch {}
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removePhoto = () => {
+    setPhoto("");
+    try { localStorage.removeItem("doorbase_profile_photo"); } catch {}
+  };
 
   const handleSave = () => {
     try { localStorage.setItem("doorbase_profile_name", name); } catch {}
@@ -2376,6 +2434,37 @@ function DashSettingsPanel({ standards, onSaveStandards, defaultMode, onSetDefau
 
       {sectionHeader("Profile")}
       <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
+          <div style={{ position: "relative" }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: "50%", background: photo ? "none" : C.green,
+              display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+              border: `2px solid ${C.border}`, cursor: "pointer", flexShrink: 0,
+            }} onClick={() => photoInputRef.current?.click()}>
+              {photo ? (
+                <img src={photo} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.white} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              )}
+            </div>
+            <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoChange} style={{ display: "none" }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4 }}>Profile Photo</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => photoInputRef.current?.click()} style={{
+                background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6,
+                padding: "6px 12px", fontSize: 12, fontWeight: 600, color: C.muted,
+                cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+              }}>Upload</button>
+              {photo && <button onClick={removePhoto} style={{
+                background: "none", border: `1px solid ${C.border}`, borderRadius: 6,
+                padding: "6px 12px", fontSize: 12, fontWeight: 600, color: C.red,
+                cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+              }}>Remove</button>}
+            </div>
+          </div>
+        </div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelStyle}>Name</label>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" style={inputStyle} />
@@ -2385,6 +2474,16 @@ function DashSettingsPanel({ standards, onSaveStandards, defaultMode, onSetDefau
           <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" style={inputStyle} />
         </div>
       </div>
+
+      <button onClick={onSignOut} style={{
+        width: "100%", padding: "10px", background: "none", border: `1.5px solid ${C.border}`,
+        borderRadius: 10, color: C.red, fontSize: 13, fontWeight: 600,
+        cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginTop: 8, marginBottom: 8,
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+      }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign Out
+      </button>
 
       {sectionHeader("Deal Standards")}
       <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 8 }}>
@@ -2448,13 +2547,6 @@ function DashSettingsPanel({ standards, onSaveStandards, defaultMode, onSetDefau
         color: C.white, fontSize: 15, fontWeight: 700, cursor: "pointer",
         fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)",
       }}>{saved ? "Saved!" : "Save Settings"}</button>
-
-      <div style={{ height: 1, background: C.border, margin: "24px 0" }} />
-      <button onClick={onSignOut} style={{
-        width: "100%", padding: "12px", background: "none", border: `1.5px solid ${C.border}`,
-        borderRadius: 10, color: C.red, fontSize: 14, fontWeight: 600,
-        cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-      }}>Sign Out</button>
     </div>
   );
 }
@@ -2499,7 +2591,7 @@ function FeedbackPanel() {
     return (
       <div style={{ maxWidth: 560 }}>
         <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "40px 24px", textAlign: "center" }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>&#10003;</div>
+          <div style={{ marginBottom: 16, display: "flex", justifyContent: "center" }}><Check size={48} color={C.green} /></div>
           <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 8 }}>Thanks — we read every one.</div>
           <div style={{ fontSize: 14, color: C.muted }}>Your feedback helps us build a better DoorBase.</div>
         </div>
@@ -2523,7 +2615,7 @@ function FeedbackPanel() {
               display: "flex", alignItems: "center", justifyContent: "center",
               cursor: "pointer", fontSize: 18, transition: "all 0.15s",
               color: n <= rating ? C.green : C.mutedLight,
-            }}>&#9733;</div>
+            }}><Star size={18} color={n <= rating ? C.green : C.mutedLight} fill={n <= rating ? C.green : "none"} /></div>
           ))}
         </div>
       </div>
@@ -2644,7 +2736,7 @@ function HomePickerCard({ title, desc, checklist, stats, onClick }) {
       <div style={{ marginBottom: 24 }}>
         {checklist.map((item, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ color: C.green, fontSize: 13, fontWeight: 700 }}>&#10003;</span>
+            <Check size={13} color={C.green} strokeWidth={3} />
             <span style={{ fontSize: 13, color: C.text }}>{item}</span>
           </div>
         ))}
@@ -2918,7 +3010,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                   cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600,
                 }}>
                   <span>{m.label}</span>
-                  {view === m.id && <span style={{ color: C.green, fontSize: 16 }}>&#10003;</span>}
+                  {view === m.id && <Check size={16} color={C.green} strokeWidth={3} />}
                 </div>
               ))}
               <div style={{ height: 1, background: C.border, margin: "8px 0" }} />
@@ -2978,14 +3070,24 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
 
         {/* Top bar */}
         <div className="db-topbar" style={{ ...topBarStyle, ...(isMobile ? { left: 0, padding: '0 16px' } : {}) }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: C.text, fontFamily: "'DM Sans', sans-serif" }}>{dashPanel === "settings" ? "Settings" : dashPanel === "feedback" ? "Beta Feedback" : navTitle}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "'DM Sans', sans-serif" }}>
+            <span onClick={() => { setDashPanel(null); setPipelineNav("dashboard"); }} style={{ fontSize: 14, fontWeight: 600, color: C.muted, cursor: "pointer" }}>Deal Pipeline</span>
+            {(dashPanel || pipelineNav !== "dashboard") && <ChevronRight size={14} color={C.mutedLight} />}
+            {dashPanel === "settings" ? (
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Settings</span>
+            ) : dashPanel === "feedback" ? (
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Beta Feedback</span>
+            ) : pipelineNav !== "dashboard" ? (
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{navTitle}</span>
+            ) : null}
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {pipelineNav === "analyzer" && !dashPanel && (
               <button onClick={onShowSettings} style={{
                 background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
                 width: 36, height: 36, display: "flex", alignItems: "center",
                 justifyContent: "center", cursor: "pointer", fontSize: 14,
-              }}>⚙️</button>
+}}><Settings size={16} color={C.muted} /></button>
             )}
             <div onClick={() => setDashPanel(dashPanel === "settings" ? null : "settings")} style={{ ...avatarStyle, cursor: "pointer" }}>{userInitials}</div>
           </div>
@@ -3015,7 +3117,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
         <div className="db-main" style={{ marginLeft: isMobile ? 0 : 220, padding: isMobile ? '16px' : '28px', paddingTop: isMobile ? 72 : 84, paddingBottom: isMobile ? 84 : undefined }}>
           {isMobile && !dashPanel && (
             <div onClick={() => setView("properties")} style={{ fontSize: 12, fontWeight: 600, color: C.green, cursor: "pointer", marginBottom: 12, fontFamily: "'DM Sans', sans-serif" }}>
-              Switch to My Properties &#8594;
+              Switch to My Properties <ArrowRight size={12} color={C.green} style={{ marginLeft: 4 }} />
             </div>
           )}
           {dashPanel === "settings" && <DashSettingsPanel standards={standards} onSaveStandards={onSaveStandards} defaultMode={mode} onSetDefaultMode={setMode} onSignOut={onSignOut} />}
@@ -3117,7 +3219,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                   fontSize: 14, fontWeight: 600, color: C.green, cursor: "pointer",
                   fontFamily: "'DM Sans', sans-serif", padding: "8px 0", marginBottom: 12,
                 }}>
-                  <span style={{ fontSize: 18, lineHeight: 1 }}>&larr;</span> Dashboard
+                  <ArrowLeft size={16} color={C.green} /> Dashboard
                 </button>
               )}
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 20 }}>
@@ -3161,7 +3263,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading deals...</div>
               ) : deals.length === 0 ? (
                 <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
-                  <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>&#128203;</div>
+                  <div style={{ marginBottom: 12, opacity: 0.3, display: "flex", justifyContent: "center" }}><ClipboardList size={36} color={C.green} /></div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, marginBottom: 16, lineHeight: 1.5 }}>No deals yet. Analyze your first deal to see it here.</div>
                   <button onClick={() => setPipelineNav("analyzer")} style={{ background: C.green, border: "none", borderRadius: 8, padding: "10px 20px", color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)" }}>+ Analyze a Deal</button>
                 </div>
@@ -3211,7 +3313,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                     {tool.soon && <span style={{ fontSize: 10, fontWeight: 600, color: C.mutedLight, background: C.bg, padding: "3px 8px", borderRadius: 4 }}>Soon</span>}
                   </div>
                   <div style={{ fontSize: 13, color: tool.soon ? C.mutedLight : C.muted, lineHeight: 1.5 }}>{tool.desc}</div>
-                  {tool.clickable && <div style={{ fontSize: 12, color: C.green, fontWeight: 700, marginTop: 12 }}>Open Worksheet &#8594;</div>}
+                  {tool.clickable && <div style={{ fontSize: 12, color: C.green, fontWeight: 700, marginTop: 12, display: "flex", alignItems: "center", gap: 4 }}>Open Worksheet <ArrowRight size={12} color={C.green} /></div>}
                   {tool.soon && <div style={{ fontSize: 12, color: C.mutedLight, marginTop: 12 }}>Coming soon</div>}
                 </div>
               ))}
@@ -3228,10 +3330,10 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           fontFamily: "'DM Sans', sans-serif",
         }}>
           {[
-            { id: "dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
-            { id: "analyzer", label: "Analyzer", icon: "\u{1F4CA}" },
-            { id: "saved", label: "Tools", icon: "\u{1F527}" },
-            { id: "more", label: "More", icon: "\u2022\u2022\u2022" },
+            { id: "dashboard", label: "Dashboard", Icon: Home },
+            { id: "analyzer", label: "Analyzer", Icon: BarChart3 },
+            { id: "saved", label: "Tools", Icon: Wrench },
+            { id: "more", label: "More", Icon: MoreHorizontal },
           ].map(tab => {
             const isActive = tab.id === "more" ? showMore : pipelineNav === tab.id;
             return (
@@ -3242,7 +3344,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
                 cursor: "pointer", padding: "6px 16px",
               }}>
-                <span style={{ fontSize: tab.id === "more" ? 14 : 18, lineHeight: 1, fontWeight: tab.id === "more" ? 900 : 400, color: isActive ? "#22C55E" : C.muted }}>{tab.icon}</span>
+                <tab.Icon size={20} color={isActive ? "#22C55E" : C.muted} strokeWidth={isActive ? 2.5 : 2} />
                 <span style={{ fontSize: 11, fontWeight: isActive ? 700 : 500, color: isActive ? "#22C55E" : C.muted }}>{tab.label}</span>
               </div>
             );
@@ -3294,8 +3396,16 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
 
         {/* Top bar */}
         <div className="db-topbar" style={{ ...topBarStyle, ...(isMobile ? { left: 0, padding: '0 16px' } : {}) }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: C.text, fontFamily: "'DM Sans', sans-serif" }}>
-            {dashPanel === "settings" ? "Settings" : dashPanel === "feedback" ? "Beta Feedback" : (PROPERTIES_NAV.find(n => n.id === propertiesNav) || {}).label || "Portfolio Overview"}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "'DM Sans', sans-serif" }}>
+            <span onClick={() => { setDashPanel(null); setPropertiesNav("dashboard"); }} style={{ fontSize: 14, fontWeight: 600, color: C.muted, cursor: "pointer" }}>My Properties</span>
+            {(dashPanel || propertiesNav !== "dashboard") && <ChevronRight size={14} color={C.mutedLight} />}
+            {dashPanel === "settings" ? (
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Settings</span>
+            ) : dashPanel === "feedback" ? (
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Beta Feedback</span>
+            ) : propertiesNav !== "dashboard" ? (
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{(PROPERTIES_NAV.find(n => n.id === propertiesNav) || {}).label || "Portfolio Overview"}</span>
+            ) : null}
           </div>
           <div onClick={() => setDashPanel(dashPanel === "settings" ? null : "settings")} style={{ ...avatarStyle, cursor: "pointer" }}>{userInitials}</div>
         </div>
@@ -3304,7 +3414,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
         <div className="db-main" style={{ marginLeft: isMobile ? 0 : 220, padding: isMobile ? '16px' : '28px', paddingTop: isMobile ? 72 : 84, paddingBottom: isMobile ? 84 : undefined }}>
           {isMobile && !dashPanel && (
             <div onClick={() => setView("pipeline")} style={{ fontSize: 12, fontWeight: 600, color: C.green, cursor: "pointer", marginBottom: 12, fontFamily: "'DM Sans', sans-serif" }}>
-              Switch to Deal Pipeline &#8594;
+              Switch to Deal Pipeline <ArrowRight size={12} color={C.green} style={{ marginLeft: 4 }} />
             </div>
           )}
           {dashPanel === "settings" && <DashSettingsPanel standards={standards} onSaveStandards={onSaveStandards} defaultMode={mode} onSetDefaultMode={setMode} onSignOut={onSignOut} />}
@@ -3342,6 +3452,50 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                   <div style={{ fontSize: 24, fontWeight: 800, color: openMaintenance > 0 ? C.yellow : C.text }}>{openMaintenance}</div>
                 </div>
               </div>
+
+              {/* Portfolio Performance Chart */}
+              {properties.length > 0 && (() => {
+                const chartData = properties.map(p => ({
+                  name: (p.address || "").split(" ").slice(0, 2).join(" "),
+                  rent: p.monthly_rent || 0,
+                  cashFlow: (p.monthly_rent || 0) - (p.monthly_expenses || 0),
+                }));
+                return (
+                <div style={{ background: "#111827", borderRadius: 14, padding: "24px 20px", marginBottom: 28 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <TrendingUp size={18} color="#22C55E" />
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "#F8FAFC", fontFamily: "'DM Sans', sans-serif" }}>Portfolio Performance</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 16 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ width: 10, height: 3, borderRadius: 2, background: "#22C55E" }} /><span style={{ fontSize: 11, color: "#9CA3AF" }}>Cash Flow</span></div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ width: 10, height: 3, borderRadius: 2, background: "#374151" }} /><span style={{ fontSize: 11, color: "#9CA3AF" }}>Rent</span></div>
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="portfolioGreen" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#22C55E" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#22C55E" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => "$" + (v >= 1000 ? (v / 1000).toFixed(0) + "k" : v)} />
+                      <Tooltip
+                        contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}
+                        labelStyle={{ color: "#9CA3AF", fontWeight: 600 }}
+                        itemStyle={{ color: "#F8FAFC" }}
+                        formatter={(value) => ["$" + fmt(value)]}
+                      />
+                      <Area type="monotone" dataKey="rent" stroke="#374151" strokeWidth={2} fill="none" dot={false} />
+                      <Area type="monotone" dataKey="cashFlow" stroke="#22C55E" strokeWidth={2.5} fill="url(#portfolioGreen)" dot={{ fill: "#22C55E", r: 3, strokeWidth: 0 }} style={{ filter: "drop-shadow(0 0 6px rgba(34,197,94,0.5))" }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                );
+              })()}
 
               {/* Row 2 — Needs Attention */}
               <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Needs Attention</div>
@@ -3393,7 +3547,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading properties...</div>
               ) : properties.length === 0 ? (
                 <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
-                  <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>&#127968;</div>
+                  <div style={{ marginBottom: 12, opacity: 0.3, display: "flex", justifyContent: "center" }}><Home size={36} color={C.green} /></div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, lineHeight: 1.5 }}>No properties yet. Add your first property to get started.</div>
                 </div>
               ) : (
@@ -3452,7 +3606,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading properties...</div>
               ) : properties.length === 0 ? (
                 <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
-                  <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>&#127968;</div>
+                  <div style={{ marginBottom: 12, opacity: 0.3, display: "flex", justifyContent: "center" }}><Home size={36} color={C.green} /></div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, lineHeight: 1.5 }}>No properties yet.</div>
                   <button onClick={openAddProperty} style={{ ...(_addBtn), marginTop: 16 }}>+ Add Property</button>
                 </div>
@@ -3503,10 +3657,10 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           fontFamily: "'DM Sans', sans-serif",
         }}>
           {[
-            { id: "dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
-            { id: "overview", label: "Portfolio", icon: "\u{1F3D8}" },
-            { id: "tenants", label: "Tenants", icon: "\u{1F464}" },
-            { id: "more", label: "More", icon: "\u2022\u2022\u2022" },
+            { id: "dashboard", label: "Dashboard", Icon: Home },
+            { id: "overview", label: "Portfolio", Icon: Building2 },
+            { id: "tenants", label: "Tenants", Icon: Users },
+            { id: "more", label: "More", Icon: MoreHorizontal },
           ].map(tab => {
             const isActive = tab.id === "more" ? showMore : propertiesNav === tab.id;
             return (
@@ -3517,7 +3671,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
                 cursor: "pointer", padding: "6px 16px",
               }}>
-                <span style={{ fontSize: tab.id === "more" ? 14 : 18, lineHeight: 1, fontWeight: tab.id === "more" ? 900 : 400, color: isActive ? "#22C55E" : C.muted }}>{tab.icon}</span>
+                <tab.Icon size={20} color={isActive ? "#22C55E" : C.muted} strokeWidth={isActive ? 2.5 : 2} />
                 <span style={{ fontSize: 11, fontWeight: isActive ? 700 : 500, color: isActive ? "#22C55E" : C.muted }}>{tab.label}</span>
               </div>
             );
@@ -3561,7 +3715,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                   cursor: "pointer", color: C.text, fontSize: 15, fontWeight: 600,
                 }}>
                   <span>{m.label}</span>
-                  {view === m.id && <span style={{ color: C.green, fontSize: 16 }}>&#10003;</span>}
+                  {view === m.id && <Check size={16} color={C.green} strokeWidth={3} />}
                 </div>
               ))}
               <div style={{ height: 1, background: C.border, margin: "8px 0" }} />
@@ -3755,7 +3909,7 @@ export default function App() {
             <div key={i} style={{
               background: C.bg, borderRadius: 20, padding: "6px 14px",
               fontSize: 12, fontWeight: 600, color: C.muted, border: `1px solid ${C.border}`,
-            }}>&#10003; {item}</div>
+            }}><Check size={12} color={C.green} strokeWidth={3} style={{ marginRight: 4 }} /> {item}</div>
           ))}
         </div>
       </div>
@@ -3770,12 +3924,12 @@ export default function App() {
           </div>
           <div className="landing-feature-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 40 }}>
             {[
-              { title: "Deal Analyzer", desc: "Buy & Hold or Fix & Flip — get a verdict in under a minute.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> },
-              { title: "Portfolio Dashboard", desc: "Every door at a glance — rent, cash flow, vacancy, and performance.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
-              { title: "Tenant Tracker", desc: "Lease dates, rent status, contact info, and late payment history per unit.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> },
-              { title: "Financing Tracker", desc: "Every loan tracked — balance, rate, maturity date, and balloon alerts.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> },
-              { title: "Lease Renewals", desc: "Never miss a renewal window. Know who's up and when.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
-              { title: "Cash Flow Tracker", desc: "Actual vs projected, month over month. Know if your properties perform.", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
+              { title: "Deal Analyzer", desc: "Buy & Hold or Fix & Flip — get a verdict in under a minute.", icon: <BarChart3 size={24} color={C.green} /> },
+              { title: "Portfolio Dashboard", desc: "Every door at a glance — rent, cash flow, vacancy, and performance.", icon: <Home size={24} color={C.green} /> },
+              { title: "Tenant Tracker", desc: "Lease dates, rent status, contact info, and late payment history per unit.", icon: <Users size={24} color={C.green} /> },
+              { title: "Financing Tracker", desc: "Every loan tracked — balance, rate, maturity date, and balloon alerts.", icon: <DollarSign size={24} color={C.green} /> },
+              { title: "Lease Renewals", desc: "Never miss a renewal window. Know who's up and when.", icon: <Calendar size={24} color={C.green} /> },
+              { title: "Cash Flow Tracker", desc: "Actual vs projected, month over month. Know if your properties perform.", icon: <TrendingUp size={24} color={C.green} /> },
             ].map((f, i) => (
               <div key={i} className="pro-card" style={{
                 background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
@@ -3857,8 +4011,8 @@ export default function App() {
               <button onClick={() => setShowSettings(true)} style={{
                 background: C.white, border: `1px solid ${C.border}`, borderRadius: 8,
                 width: 40, height: 40, display: "flex", alignItems: "center",
-                justifyContent: "center", cursor: "pointer", fontSize: 16,
-              }}>&#9881;&#65039;</button>
+                justifyContent: "center", cursor: "pointer",
+              }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
             </div>
           </div>
 
