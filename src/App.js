@@ -1876,9 +1876,34 @@ function TenantTracker({ session }) {
     if (!payForm.dueDate || !payForm.amount) return;
     setSaving(true);
     const t = tenants.find(x => x.id === payModal.tenantId);
-    const res = await supabase.from("payment_history").insert({ user_id: session.user.id, tenant_id: payModal.tenantId, property_id: t?.property || "", amount: num(payForm.amount), due_date: payForm.dueDate, paid_date: payForm.paidDate || null, month: payForm.month, notes: payForm.notes }).select().single();
+    const propertyId = t?.property || "";
+    const paymentAmount = num(payForm.amount);
+    const res = await supabase.from("payment_history").insert({ user_id: session.user.id, tenant_id: payModal.tenantId, property_id: propertyId, amount: paymentAmount, due_date: payForm.dueDate, paid_date: payForm.paidDate || null, month: payForm.month, notes: payForm.notes }).select().single();
     dbLog("payment_history.insert", res);
     if (res.data) setPayments(prev => [res.data, ...prev]);
+
+    // Auto-update tenant payment status
+    const isOverdue = !payForm.paidDate && new Date(payForm.dueDate) < new Date();
+    const newStatus = isOverdue ? "late" : (t?.status === "late" && payForm.paidDate ? "current" : undefined);
+    if (newStatus && t) {
+      const upd = await supabase.from("tenants").update({ status: newStatus }).eq("id", payModal.tenantId).select().single();
+      dbLog("tenants.status_update", upd);
+      if (upd.data) setTenants(prev => prev.map(x => x.id === payModal.tenantId ? { ...x, status: newStatus } : x));
+    }
+
+    // Feed payment into Cash Flow Tracker as actual rent received
+    if (payForm.paidDate && payForm.month && propertyId) {
+      const existing = await supabase.from("cash_flow_entries").select("*").eq("month", payForm.month).eq("property_id", propertyId).eq("user_id", session.user.id).maybeSingle();
+      dbLog("cash_flow_entries.lookup", existing);
+      if (existing.data) {
+        const cfUpd = await supabase.from("cash_flow_entries").update({ actual_rent: (existing.data.actual_rent || 0) + paymentAmount }).eq("id", existing.data.id).select().single();
+        dbLog("cash_flow_entries.update_rent", cfUpd);
+      } else {
+        const cfIns = await supabase.from("cash_flow_entries").insert({ user_id: session.user.id, month: payForm.month, property_id: propertyId, projected_cash_flow: 0, actual_rent: paymentAmount, actual_expenses: 0 }).select().single();
+        dbLog("cash_flow_entries.insert_from_payment", cfIns);
+      }
+    }
+
     setSaving(false);
     setPayModal(null);
   };
