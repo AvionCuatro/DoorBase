@@ -3618,6 +3618,7 @@ const PIPELINE_NAV = [
   { id: "rehab", label: "Rehab Estimator" },
   { id: "rent", label: "Rent Analysis" },
   { id: "comps", label: "Comp Tracker" },
+  { id: "flipvsrent", label: "Flip vs Rent" },
 ];
 
 const PROPERTIES_NAV = [
@@ -3938,6 +3939,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                   else if (item.id === "rehab") setShowRehab(true);
                   else if (item.id === "rent") setShowRentAnalysis(true);
                   else if (item.id === "comps") setShowCompTracker(true);
+                  else if (item.id === "flipvsrent") setShowFlipVsRent(true);
                   else setPipelineNav(item.id);
                 }}
               />
