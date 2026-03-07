@@ -374,13 +374,14 @@ function EmailResultsModal({ onClose, result, mode }) {
       });
       if (res.error) {
         setStatus("error");
-        setErrorMsg("Failed to send. Please try again.");
+        const detail = res.error?.message || res.error?.context?.message || "";
+        setErrorMsg(detail ? `Failed to send: ${detail}` : "Failed to send. Please try again.");
       } else {
         setStatus("success");
       }
-    } catch {
+    } catch (e) {
       setStatus("error");
-      setErrorMsg("Failed to send. Please try again.");
+      setErrorMsg(e?.message ? `Failed to send: ${e.message}` : "Failed to send. Please try again.");
     }
   };
 
