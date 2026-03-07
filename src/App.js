@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Home, Users, DollarSign, Calendar, Wrench, TrendingUp, BarChart3, Building2, BookOpen, FileText, ClipboardList, Calculator, Search, Star, AlertTriangle, Check, X, ChevronRight, ArrowLeft, ArrowRight, Settings, MessageSquare, MoreHorizontal } from "lucide-react";
+import { Home, Users, DollarSign, Calendar, Wrench, TrendingUp, BarChart3, Building2, BookOpen, FileText, ClipboardList, Calculator, Search, Star, AlertTriangle, Check, X, ChevronRight, ArrowLeft, ArrowRight, Settings, MessageSquare, MoreHorizontal, HelpCircle, Hammer, Camera, Plus, Minus, Edit3, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 // IMPORTANT: Replace anon key below with your real Supabase anon key (starts with eyJ...)
@@ -343,9 +343,10 @@ function EmailResultsModal({ onClose, result, mode }) {
     }
     return [
       { label: "Buy Closing Costs", value: fmtD(result.buyClose) },
-      { label: "Rehab Cost", value: fmtD(result.totalIn - result.buyClose - result.holdCost - result.interestCost) },
+      { label: "Rehab Cost", value: fmtD(result.totalIn - result.buyClose - result.holdCost - result.interestCost - (result.pointsCost || 0)) },
       { label: "Holding Costs", value: fmtD(result.holdCost) },
       { label: "Interest / Finance Cost", value: fmtD(result.interestCost) },
+      { label: "Points (Origination Fee)", value: fmtD(result.pointsCost || 0) },
       { label: "Total Money In", value: fmtD(result.totalIn) },
       { label: "ARV (Sale Price)", value: fmtD(result.arv) },
       { label: "Sell Closing Costs", value: fmtD(result.sellClose) },
@@ -1332,6 +1333,7 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
     purchasePrice: "", closingCostsBuy: "3", rehabCost: "",
     holdingMonths: "6", monthlyHolding: "", arvEstimate: "",
     closingCostsSell: "8", financeAmt: "", interestRate: "10",
+    points: "2",
   });
   const [result, setResult] = useState(null);
   const [showRehab, setShowRehab] = useState(false);
@@ -1347,7 +1349,8 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
     const arv = num(f.arvEstimate);
     const sellClose = arv * (num(f.closingCostsSell) / 100);
     const interestCost = num(f.financeAmt) * (num(f.interestRate) / 100) * (holdMo / 12);
-    const totalIn = purchase + buyClose + rehab + holdCost + interestCost;
+    const pointsCost = num(f.financeAmt) * (num(f.points) / 100);
+    const totalIn = purchase + buyClose + rehab + holdCost + interestCost + pointsCost;
     const netProfit = arv - sellClose - totalIn;
     const roi = totalIn > 0 ? (netProfit / totalIn) * 100 : 0;
     const arvSpread = arv > 0 ? ((arv - purchase) / arv) * 100 : 0;
@@ -1356,7 +1359,7 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
     let verdict = "red";
     if (netProfit >= s.greenProfit && roi >= s.greenROI) verdict = "green";
     else if (netProfit >= s.yellowProfit && roi >= s.yellowROI) verdict = "yellow";
-    setResult({ buyClose, holdCost, interestCost, totalIn, sellClose, netProfit, roi, arvSpread, maxAllowable, arv, verdict });
+    setResult({ buyClose, holdCost, interestCost, pointsCost, totalIn, sellClose, netProfit, roi, arvSpread, maxAllowable, arv, verdict });
     if (session) {
       supabase.from("deals").insert({
         user_id: session.user.id,
@@ -1406,11 +1409,13 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
             <Field label="Monthly Hold Cost" value={f.monthlyHolding} onChange={set("monthlyHolding")} />
           </TwoCol>
           <div style={{ height: 8 }} />
+          <Field label="Finance Amount" value={f.financeAmt} onChange={set("financeAmt")} />
+          <div style={{ height: 8 }} />
           <TwoCol>
-            <Field label="Finance Amount" value={f.financeAmt} onChange={set("financeAmt")} />
             <Field label="Interest Rate" value={f.interestRate} onChange={set("interestRate")} prefix="%" suffix="" isPro={isPro}
               proTip={isPro ? "Compare hard money lenders in the Underwriting Worksheet." : "Compare hard money lenders side by side with Pro."}
               onScrollToPro={onScrollToPro} />
+            <Field label="Points (Origination Fee)" value={f.points} onChange={set("points")} prefix="%" suffix="" />
           </TwoCol>
         </Card>
         <Card>
@@ -1419,7 +1424,13 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
             proTip="Build a confident ARV with the Comp Tracker."
             onScrollToPro={isPro ? () => setShowCompTracker(true) : onUpgrade} />
           <div style={{ height: 8 }} />
-          <Field label="Sell Closing Costs" value={f.closingCostsSell} onChange={set("closingCostsSell")} prefix="%" suffix="" />
+          <div style={{ position: "relative" }}>
+            <Field label="Sell Closing Costs" value={f.closingCostsSell} onChange={set("closingCostsSell")} prefix="%" suffix="" />
+            <div style={{ fontSize: 11, color: C.mutedLight, marginTop: -6, marginBottom: 4, lineHeight: 1.5, display: "flex", alignItems: "flex-start", gap: 4 }}>
+              <HelpCircle size={12} color={C.mutedLight} style={{ flexShrink: 0, marginTop: 1 }} />
+              Agent commissions, title insurance, transfer taxes, escrow — typically 6–8% total.
+            </div>
+          </div>
         </Card>
         <button onClick={calculate} style={{
           width: "100%", padding: "14px", background: C.green, border: "none", borderRadius: 10,
@@ -1438,6 +1449,7 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
             <StatRow label="Rehab Cost" value={fmtD(num(f.rehabCost))} />
             <StatRow label="Holding Costs" value={fmtD(result.holdCost)} />
             <StatRow label="Interest / Finance Cost" value={fmtD(result.interestCost)} />
+            <StatRow label="Points (Origination Fee)" value={fmtD(result.pointsCost)} />
             <StatRow label="Total Money In" value={fmtD(result.totalIn)} />
             <StatRow label="ARV (Sale Price)" value={fmtD(result.arv)} />
             <StatRow label="Sell Closing Costs" value={fmtD(result.sellClose)} />
@@ -2921,6 +2933,577 @@ function FeedbackPanel() {
   );
 }
 
+// ─── FLIP VS RENT COMPARISON ────────────────────────────────────────────────
+function FlipVsRentTool({ onClose }) {
+  const [shared, setShared] = useState({ purchasePrice: "", rehabCost: "", condition: "Average" });
+  const [flip, setFlip] = useState({ closingCostsBuy: "3", holdingMonths: "6", monthlyHolding: "", financeAmt: "", interestRate: "10", points: "2", arvEstimate: "", closingCostsSell: "8" });
+  const [rent, setRent] = useState({ downPercent: "20", loanRate: "7.5", loanTermYears: "30", monthlyRent: "", vacancy: "8", propertyTax: "", insurance: "", maintenance: "", mgmt: "0" });
+  const [result, setResult] = useState(null);
+
+  const setS = (k) => (v) => setShared(p => ({ ...p, [k]: v }));
+  const setFl = (k) => (v) => setFlip(p => ({ ...p, [k]: v }));
+  const setR = (k) => (v) => setRent(p => ({ ...p, [k]: v }));
+
+  const compare = () => {
+    const purchase = num(shared.purchasePrice);
+    const rehab = num(shared.rehabCost);
+    // Flip calc
+    const fBuyClose = purchase * (num(flip.closingCostsBuy) / 100);
+    const fHoldMo = num(flip.holdingMonths);
+    const fHoldCost = num(flip.monthlyHolding) * fHoldMo;
+    const fInterest = num(flip.financeAmt) * (num(flip.interestRate) / 100) * (fHoldMo / 12);
+    const fPoints = num(flip.financeAmt) * (num(flip.points) / 100);
+    const arv = num(flip.arvEstimate);
+    const fSellClose = arv * (num(flip.closingCostsSell) / 100);
+    const fTotalIn = purchase + fBuyClose + rehab + fHoldCost + fInterest + fPoints;
+    const fProfit = arv - fSellClose - fTotalIn;
+    const fROI = fTotalIn > 0 ? (fProfit / fTotalIn) * 100 : 0;
+    // Rent calc
+    const rDown = purchase * (num(rent.downPercent) / 100);
+    const rLoanAmt = purchase - rDown;
+    const rMonthlyRate = num(rent.loanRate) / 100 / 12;
+    const rN = num(rent.loanTermYears) * 12;
+    const rMortgage = rLoanAmt > 0 && rMonthlyRate > 0 ? rLoanAmt * (rMonthlyRate * Math.pow(1 + rMonthlyRate, rN)) / (Math.pow(1 + rMonthlyRate, rN) - 1) : 0;
+    const rGross = num(rent.monthlyRent);
+    const rVacLoss = rGross * (num(rent.vacancy) / 100);
+    const rEffective = rGross - rVacLoss;
+    const rOpEx = num(rent.propertyTax) / 12 + num(rent.insurance) / 12 + num(rent.maintenance) + (rEffective * num(rent.mgmt) / 100);
+    const rNOI = rEffective - rOpEx;
+    const rCashFlow = rNOI - rMortgage;
+    const rAnnualCF = rCashFlow * 12;
+    const rTotalInvested = rDown + rehab;
+    const rCashOnCash = rTotalInvested > 0 ? (rAnnualCF / rTotalInvested) * 100 : 0;
+    // 5-year projection
+    const appreciation = 0.03;
+    const rentGrowth = 0.02;
+    const projection = [];
+    let cumFlipProfit = fProfit;
+    let propValue = purchase;
+    let cumRentCF = 0;
+    let yearlyRent = rAnnualCF;
+    for (let y = 1; y <= 5; y++) {
+      propValue *= (1 + appreciation);
+      const equity = propValue - rLoanAmt;
+      yearlyRent = y === 1 ? rAnnualCF : yearlyRent * (1 + rentGrowth);
+      cumRentCF += yearlyRent;
+      projection.push({ year: y, flipValue: cumFlipProfit, rentCashFlow: cumRentCF, rentEquity: equity, rentTotal: cumRentCF + equity - rDown });
+    }
+    const winner = fProfit > cumRentCF + (propValue - rLoanAmt) - rDown ? "flip" : "rent";
+    setResult({ fProfit, fROI, fTotalIn, arv, fSellClose, rCashFlow, rAnnualCF, rCashOnCash, rDown, rTotalInvested, rMortgage, projection, winner });
+  };
+
+  const bx = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "40px 16px" };
+  const panel = { background: C.white, borderRadius: 14, padding: "20px", border: `1px solid ${C.border}`, flex: 1, minWidth: 0 };
+
+  return (
+    <div style={bx} onClick={onClose}>
+      <div style={{ background: C.white, borderRadius: 16, width: "100%", maxWidth: 960, padding: "28px 24px", boxShadow: "0 24px 64px rgba(0,0,0,0.2)" }} onClick={e => e.stopPropagation()}>
+        {_modalHeader("Flip vs Rent Comparison", onClose)}
+
+        {/* Shared inputs */}
+        <Card>
+          <SectionTitle>Property Details</SectionTitle>
+          <TwoCol>
+            <Field label="Purchase Price" value={shared.purchasePrice} onChange={setS("purchasePrice")} />
+            <Field label="Rehab / Repair Cost" value={shared.rehabCost} onChange={setS("rehabCost")} />
+          </TwoCol>
+        </Card>
+
+        {/* Side by side inputs */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div style={panel}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: C.green, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.06em" }}>Flip Path</div>
+            <Field label="ARV (Sale Price)" value={flip.arvEstimate} onChange={setFl("arvEstimate")} />
+            <div style={{ height: 6 }} />
+            <TwoCol>
+              <Field label="Hold Period" value={flip.holdingMonths} onChange={setFl("holdingMonths")} prefix="" suffix="mo" />
+              <Field label="Monthly Hold Cost" value={flip.monthlyHolding} onChange={setFl("monthlyHolding")} />
+            </TwoCol>
+            <div style={{ height: 6 }} />
+            <TwoCol>
+              <Field label="Finance Amt" value={flip.financeAmt} onChange={setFl("financeAmt")} />
+              <Field label="Interest Rate" value={flip.interestRate} onChange={setFl("interestRate")} prefix="%" suffix="" />
+            </TwoCol>
+            <div style={{ height: 6 }} />
+            <TwoCol>
+              <Field label="Points" value={flip.points} onChange={setFl("points")} prefix="%" suffix="" />
+              <Field label="Sell Closing" value={flip.closingCostsSell} onChange={setFl("closingCostsSell")} prefix="%" suffix="" />
+            </TwoCol>
+          </div>
+          <div style={panel}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#3b82f6", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.06em" }}>Rent Path</div>
+            <Field label="Monthly Rent" value={rent.monthlyRent} onChange={setR("monthlyRent")} />
+            <div style={{ height: 6 }} />
+            <TwoCol>
+              <Field label="Down Payment" value={rent.downPercent} onChange={setR("downPercent")} prefix="%" suffix="" />
+              <Field label="Loan Rate" value={rent.loanRate} onChange={setR("loanRate")} prefix="%" suffix="" />
+            </TwoCol>
+            <div style={{ height: 6 }} />
+            <TwoCol>
+              <Field label="Property Tax / Yr" value={rent.propertyTax} onChange={setR("propertyTax")} />
+              <Field label="Insurance / Yr" value={rent.insurance} onChange={setR("insurance")} />
+            </TwoCol>
+            <div style={{ height: 6 }} />
+            <TwoCol>
+              <Field label="Maintenance / Mo" value={rent.maintenance} onChange={setR("maintenance")} />
+              <Field label="Vacancy" value={rent.vacancy} onChange={setR("vacancy")} prefix="%" suffix="" />
+            </TwoCol>
+          </div>
+        </div>
+
+        <button onClick={compare} style={{ width: "100%", padding: "14px", background: C.green, border: "none", borderRadius: 10, color: C.white, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(22,163,74,0.3)", marginBottom: 16 }}>Compare Paths</button>
+
+        {result && (
+          <>
+            {/* Winner banner */}
+            <div style={{ background: result.winner === "flip" ? C.greenLight : "#dbeafe", border: `2px solid ${result.winner === "flip" ? "#86efac" : "#93c5fd"}`, borderRadius: 14, padding: "20px 24px", textAlign: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: result.winner === "flip" ? C.green : "#3b82f6", marginBottom: 4 }}>
+                {result.winner === "flip" ? "Flip Wins" : "Rent Wins"} — 5 Year Horizon
+              </div>
+              <div style={{ fontSize: 13, color: C.muted }}>
+                {result.winner === "flip"
+                  ? `Net profit of ${fmtD(result.fProfit)} now beats the 5-year rental return.`
+                  : `Cumulative cash flow + equity beats the one-time flip profit over 5 years.`}
+              </div>
+            </div>
+
+            {/* Side by side results */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <Card style={{ border: `2px solid ${result.winner === "flip" ? "#86efac" : C.border}` }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: C.green, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Flip Returns</div>
+                <StatRow label="Net Profit" value={fmtD(result.fProfit)} highlight />
+                <StatRow label="ROI" value={fmtP(result.fROI)} />
+                <StatRow label="Total Money In" value={fmtD(result.fTotalIn)} />
+                <StatRow label="Timeline" value={`${num(flip.holdingMonths)} months`} last />
+              </Card>
+              <Card style={{ border: `2px solid ${result.winner === "rent" ? "#93c5fd" : C.border}` }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#3b82f6", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Rental Returns</div>
+                <StatRow label="Monthly Cash Flow" value={fmtD(result.rCashFlow)} highlight />
+                <StatRow label="Cash-on-Cash Return" value={fmtP(result.rCashOnCash)} />
+                <StatRow label="Annual Cash Flow" value={fmtD(result.rAnnualCF)} />
+                <StatRow label="Total Invested" value={fmtD(result.rTotalInvested)} last />
+              </Card>
+            </div>
+
+            {/* 5-Year Projection Table */}
+            <Card>
+              <SectionTitle>5-Year Projection</SectionTitle>
+              <div style={{ fontSize: 11, color: C.mutedLight, marginBottom: 10 }}>Assumes 3% annual appreciation, 2% rent growth</div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                      <th style={{ textAlign: "left", padding: "8px 10px", fontWeight: 700, color: C.muted, fontSize: 11, textTransform: "uppercase" }}>Year</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", fontWeight: 700, color: C.green, fontSize: 11, textTransform: "uppercase" }}>Flip Value</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", fontWeight: 700, color: "#3b82f6", fontSize: 11, textTransform: "uppercase" }}>Rent Cash Flow</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", fontWeight: 700, color: "#3b82f6", fontSize: 11, textTransform: "uppercase" }}>Rent Equity</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", fontWeight: 700, color: "#3b82f6", fontSize: 11, textTransform: "uppercase" }}>Rent Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.projection.map(p => (
+                      <tr key={p.year} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: "10px", fontWeight: 600 }}>Year {p.year}</td>
+                        <td style={{ padding: "10px", textAlign: "right", fontWeight: 700, color: C.green }}>{fmtD(p.flipValue)}</td>
+                        <td style={{ padding: "10px", textAlign: "right", color: C.text }}>{fmtD(p.rentCashFlow)}</td>
+                        <td style={{ padding: "10px", textAlign: "right", color: C.text }}>{fmtD(p.rentEquity)}</td>
+                        <td style={{ padding: "10px", textAlign: "right", fontWeight: 700, color: "#3b82f6" }}>{fmtD(p.rentTotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── ACTIVE REHABS ──────────────────────────────────────────────────────────
+function ActiveRehabs({ session }) {
+  const [rehabs, setRehabs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeRehab, setActiveRehab] = useState(null);
+  const [modal, setModal] = useState(null); // "contractor" | "note" | "photo" | "scorecard" | null
+  const [contractorForm, setContractorForm] = useState({ name: "", scope: "", bid: "", paid: "", changeOrders: "" });
+  const [noteForm, setNoteForm] = useState("");
+  const [photoRoom, setPhotoRoom] = useState("kitchen");
+  const [scorecardForm, setScorecardForm] = useState({ actualARV: "", actualRehab: "", actualHolding: "", actualSellClose: "" });
+
+  useEffect(() => {
+    if (!session) return;
+    supabase.from("active_rehabs").select("*").eq("user_id", session.user.id).order("created_at", { ascending: false })
+      .then(res => { dbLog("active_rehabs.select", res); setRehabs(res.data || []); setLoading(false); });
+  }, [session]);
+
+  const refreshRehabs = () => {
+    supabase.from("active_rehabs").select("*").eq("user_id", session.user.id).order("created_at", { ascending: false })
+      .then(res => { setRehabs(res.data || []); });
+  };
+
+  const saveContractor = async () => {
+    if (!contractorForm.name || !activeRehab) return;
+    const contractors = [...(activeRehab.contractors || []), { id: Date.now(), name: contractorForm.name, scope: contractorForm.scope, bid: num(contractorForm.bid), paid: num(contractorForm.paid), changeOrders: num(contractorForm.changeOrders) }];
+    await supabase.from("active_rehabs").update({ contractors }).eq("id", activeRehab.id);
+    setActiveRehab(prev => ({ ...prev, contractors }));
+    setContractorForm({ name: "", scope: "", bid: "", paid: "", changeOrders: "" });
+    setModal(null);
+    refreshRehabs();
+  };
+
+  const deleteContractor = async (cid) => {
+    const contractors = (activeRehab.contractors || []).filter(c => c.id !== cid);
+    await supabase.from("active_rehabs").update({ contractors }).eq("id", activeRehab.id);
+    setActiveRehab(prev => ({ ...prev, contractors }));
+    refreshRehabs();
+  };
+
+  const saveNote = async () => {
+    if (!noteForm.trim() || !activeRehab) return;
+    const notes = [...(activeRehab.notes || []), { id: Date.now(), date: new Date().toISOString().split("T")[0], text: noteForm.trim() }];
+    await supabase.from("active_rehabs").update({ notes }).eq("id", activeRehab.id);
+    setActiveRehab(prev => ({ ...prev, notes }));
+    setNoteForm("");
+    setModal(null);
+    refreshRehabs();
+  };
+
+  const deleteNote = async (nid) => {
+    const notes = (activeRehab.notes || []).filter(n => n.id !== nid);
+    await supabase.from("active_rehabs").update({ notes }).eq("id", activeRehab.id);
+    setActiveRehab(prev => ({ ...prev, notes }));
+    refreshRehabs();
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeRehab) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const photos = [...(activeRehab.photos || []), { id: Date.now(), room: photoRoom, dataUrl: ev.target.result, date: new Date().toISOString().split("T")[0] }];
+      await supabase.from("active_rehabs").update({ photos }).eq("id", activeRehab.id);
+      setActiveRehab(prev => ({ ...prev, photos }));
+      setModal(null);
+      refreshRehabs();
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const deletePhoto = async (pid) => {
+    const photos = (activeRehab.photos || []).filter(p => p.id !== pid);
+    await supabase.from("active_rehabs").update({ photos }).eq("id", activeRehab.id);
+    setActiveRehab(prev => ({ ...prev, photos }));
+    refreshRehabs();
+  };
+
+  const saveScorecard = async () => {
+    if (!activeRehab) return;
+    const scorecard = { actualARV: num(scorecardForm.actualARV), actualRehab: num(scorecardForm.actualRehab), actualHolding: num(scorecardForm.actualHolding), actualSellClose: num(scorecardForm.actualSellClose) };
+    const projected = activeRehab.projected || {};
+    const actualProfit = scorecard.actualARV - scorecard.actualSellClose - (activeRehab.purchase_price || 0) - scorecard.actualRehab - scorecard.actualHolding;
+    scorecard.actualProfit = actualProfit;
+    await supabase.from("active_rehabs").update({ scorecard, status: "closed" }).eq("id", activeRehab.id);
+    setActiveRehab(prev => ({ ...prev, scorecard, status: "closed" }));
+    setModal(null);
+    refreshRehabs();
+  };
+
+  // Detail view
+  if (activeRehab) {
+    const contractors = activeRehab.contractors || [];
+    const notes = (activeRehab.notes || []).sort((a, b) => b.id - a.id);
+    const photos = activeRehab.photos || [];
+    const projected = activeRehab.projected || {};
+    const totalBid = contractors.reduce((s, c) => s + c.bid, 0);
+    const totalPaid = contractors.reduce((s, c) => s + c.paid, 0);
+    const totalChangeOrders = contractors.reduce((s, c) => s + (c.changeOrders || 0), 0);
+    const budgetRemaining = (projected.rehabCost || 0) - totalPaid;
+    const sc = activeRehab.scorecard;
+    const ROOMS = ["kitchen", "bathroom", "bedroom", "living", "exterior", "basement", "garage"];
+
+    return (
+      <div>
+        <button onClick={() => setActiveRehab(null)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", fontSize: 14, fontWeight: 600, color: C.green, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: "0 0 16px" }}>
+          <ArrowLeft size={16} color={C.green} /> Back to Active Rehabs
+        </button>
+
+        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>{activeRehab.address}</div>
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>
+          Started {activeRehab.created_at ? new Date(activeRehab.created_at).toLocaleDateString() : "—"}
+          {activeRehab.status === "closed" && <span style={{ marginLeft: 8, background: C.greenLight, color: C.green, padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>CLOSED</span>}
+        </div>
+
+        {/* Budget overview */}
+        <div className="db-stat-row" style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+          <DashStatCard label="Projected Rehab" value={fmtD(projected.rehabCost || 0)} />
+          <DashStatCard label="Actual Spent" value={fmtD(totalPaid)} />
+          <DashStatCard label="Budget Remaining" value={fmtD(budgetRemaining)} />
+          <DashStatCard label="Change Orders" value={fmtD(totalChangeOrders)} />
+        </div>
+
+        {/* Budget bar */}
+        {(projected.rehabCost || 0) > 0 && (() => {
+          const pct = Math.min((totalPaid / projected.rehabCost) * 100, 100);
+          const over = totalPaid > projected.rehabCost;
+          return (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 4 }}>
+                <span>Budget Used</span>
+                <span style={{ color: over ? C.red : C.green }}>{pct.toFixed(0)}%</span>
+              </div>
+              <div style={{ height: 8, background: C.bg, borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pct}%`, background: over ? C.red : C.green, borderRadius: 4, transition: "width 0.3s" }} />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Action buttons */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          <button onClick={() => { setContractorForm({ name: "", scope: "", bid: "", paid: "", changeOrders: "" }); setModal("contractor"); }} style={_addBtn}><Plus size={14} style={{ marginRight: 4 }} /> Add Contractor</button>
+          <button onClick={() => { setNoteForm(""); setModal("note"); }} style={_addBtn}><Edit3 size={14} style={{ marginRight: 4 }} /> Add Progress Note</button>
+          <button onClick={() => setModal("photo")} style={_addBtn}><Camera size={14} style={{ marginRight: 4 }} /> Upload Photo</button>
+          {activeRehab.status !== "closed" && (
+            <button onClick={() => { setScorecardForm({ actualARV: "", actualRehab: String(totalPaid || ""), actualHolding: "", actualSellClose: "" }); setModal("scorecard"); }} style={{ ..._addBtn, background: "#f59e0b" }}>Close & Score This Flip</button>
+          )}
+        </div>
+
+        {/* Contractor modal */}
+        {modal === "contractor" && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setModal(null)}>
+            <div style={{ background: C.white, borderRadius: 14, padding: "24px", width: "100%", maxWidth: 440, margin: "0 16px" }} onClick={e => e.stopPropagation()}>
+              {_modalHeader("Add Contractor", () => setModal(null))}
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Contractor Name</label><input value={contractorForm.name} onChange={e => setContractorForm(p => ({ ...p, name: e.target.value }))} placeholder="ABC Plumbing" style={_modalInput} /></div>
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Scope of Work</label><input value={contractorForm.scope} onChange={e => setContractorForm(p => ({ ...p, scope: e.target.value }))} placeholder="Kitchen and bath rough-in" style={_modalInput} /></div>
+              <TwoCol>
+                <div><label style={_modalLabel}>Bid Amount</label><input type="number" value={contractorForm.bid} onChange={e => setContractorForm(p => ({ ...p, bid: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+                <div><label style={_modalLabel}>Amount Paid</label><input type="number" value={contractorForm.paid} onChange={e => setContractorForm(p => ({ ...p, paid: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+              </TwoCol>
+              <div style={{ marginTop: 12 }}><label style={_modalLabel}>Change Orders</label><input type="number" value={contractorForm.changeOrders} onChange={e => setContractorForm(p => ({ ...p, changeOrders: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+              <button onClick={saveContractor} style={_modalSubmit()}>Add Contractor</button>
+            </div>
+          </div>
+        )}
+
+        {/* Note modal */}
+        {modal === "note" && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setModal(null)}>
+            <div style={{ background: C.white, borderRadius: 14, padding: "24px", width: "100%", maxWidth: 440, margin: "0 16px" }} onClick={e => e.stopPropagation()}>
+              {_modalHeader("Weekly Progress Note", () => setModal(null))}
+              <textarea value={noteForm} onChange={e => setNoteForm(e.target.value)} rows={4} placeholder="What got done this week? Any issues?" style={{ ..._modalInput, resize: "vertical" }} />
+              <button onClick={saveNote} style={_modalSubmit()}>Save Note</button>
+            </div>
+          </div>
+        )}
+
+        {/* Photo upload modal */}
+        {modal === "photo" && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setModal(null)}>
+            <div style={{ background: C.white, borderRadius: 14, padding: "24px", width: "100%", maxWidth: 440, margin: "0 16px" }} onClick={e => e.stopPropagation()}>
+              {_modalHeader("Upload Pre-Rehab Photo", () => setModal(null))}
+              <div style={{ marginBottom: 12 }}>
+                <label style={_modalLabel}>Room</label>
+                <select value={photoRoom} onChange={e => setPhotoRoom(e.target.value)} style={{ ..._modalInput, cursor: "pointer" }}>
+                  {ROOMS.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                </select>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "24px", border: `2px dashed ${C.border}`, borderRadius: 10, cursor: "pointer", color: C.muted, fontSize: 14, fontWeight: 600 }}>
+                <Upload size={20} color={C.green} /> Choose Photo
+                <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: "none" }} />
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Scorecard modal */}
+        {modal === "scorecard" && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setModal(null)}>
+            <div style={{ background: C.white, borderRadius: 14, padding: "24px", width: "100%", maxWidth: 480, margin: "0 16px" }} onClick={e => e.stopPropagation()}>
+              {_modalHeader("Flip Scorecard — Close This Flip", () => setModal(null))}
+              <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Enter your actual numbers. We'll compare them to your projections.</div>
+              <TwoCol>
+                <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Actual Sale Price (ARV)</label><input type="number" value={scorecardForm.actualARV} onChange={e => setScorecardForm(p => ({ ...p, actualARV: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+                <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Actual Rehab Cost</label><input type="number" value={scorecardForm.actualRehab} onChange={e => setScorecardForm(p => ({ ...p, actualRehab: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+              </TwoCol>
+              <TwoCol>
+                <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Actual Holding Costs</label><input type="number" value={scorecardForm.actualHolding} onChange={e => setScorecardForm(p => ({ ...p, actualHolding: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+                <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Actual Sell Closing</label><input type="number" value={scorecardForm.actualSellClose} onChange={e => setScorecardForm(p => ({ ...p, actualSellClose: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+              </TwoCol>
+              <button onClick={saveScorecard} style={_modalSubmit()}>Close & Generate Scorecard</button>
+            </div>
+          </div>
+        )}
+
+        {/* Scorecard display */}
+        {sc && (
+          <Card style={{ background: C.greenLight, border: `2px solid #86efac`, marginBottom: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: C.green, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.06em" }}>Flip Scorecard — Projected vs Actual</div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: `2px solid #86efac` }}>
+                    <th style={{ textAlign: "left", padding: "8px 10px", fontWeight: 700, color: C.muted, fontSize: 11, textTransform: "uppercase" }}>Metric</th>
+                    <th style={{ textAlign: "right", padding: "8px 10px", fontWeight: 700, color: C.muted, fontSize: 11, textTransform: "uppercase" }}>Projected</th>
+                    <th style={{ textAlign: "right", padding: "8px 10px", fontWeight: 700, color: C.muted, fontSize: 11, textTransform: "uppercase" }}>Actual</th>
+                    <th style={{ textAlign: "right", padding: "8px 10px", fontWeight: 700, color: C.muted, fontSize: 11, textTransform: "uppercase" }}>Variance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: "Sale Price (ARV)", proj: projected.arv, actual: sc.actualARV },
+                    { label: "Rehab Cost", proj: projected.rehabCost, actual: sc.actualRehab },
+                    { label: "Holding Costs", proj: projected.holdingCost, actual: sc.actualHolding },
+                    { label: "Sell Closing", proj: projected.sellClose, actual: sc.actualSellClose },
+                    { label: "Net Profit", proj: projected.netProfit, actual: sc.actualProfit, highlight: true },
+                  ].map((row, i) => {
+                    const variance = (row.actual || 0) - (row.proj || 0);
+                    const isProfit = row.label === "Net Profit";
+                    const good = isProfit ? variance >= 0 : row.label === "Sale Price (ARV)" ? variance >= 0 : variance <= 0;
+                    return (
+                      <tr key={i} style={{ borderBottom: `1px solid #bbf7d0` }}>
+                        <td style={{ padding: "10px", fontWeight: row.highlight ? 700 : 500 }}>{row.label}</td>
+                        <td style={{ padding: "10px", textAlign: "right" }}>{fmtD(row.proj || 0)}</td>
+                        <td style={{ padding: "10px", textAlign: "right", fontWeight: 700 }}>{fmtD(row.actual || 0)}</td>
+                        <td style={{ padding: "10px", textAlign: "right", fontWeight: 700, color: good ? C.green : C.red }}>{variance >= 0 ? "+" : ""}{fmtD(variance)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
+        {/* Contractors table */}
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>Contractors</div>
+          </div>
+          {contractors.length === 0 ? (
+            <div style={{ fontSize: 13, color: C.muted, padding: "16px 0", textAlign: "center" }}>No contractors yet. Add one to start tracking.</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                    {["Contractor", "Scope", "Bid", "Paid", "Balance", "Change Orders", ""].map(h => (
+                      <th key={h} style={{ textAlign: h === "" ? "center" : "left", padding: "8px 8px", fontWeight: 700, color: C.muted, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {contractors.map(c => (
+                    <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <td style={{ padding: "10px 8px", fontWeight: 600 }}>{c.name}</td>
+                      <td style={{ padding: "10px 8px", color: C.muted }}>{c.scope}</td>
+                      <td style={{ padding: "10px 8px" }}>{fmtD(c.bid)}</td>
+                      <td style={{ padding: "10px 8px" }}>{fmtD(c.paid)}</td>
+                      <td style={{ padding: "10px 8px", fontWeight: 700, color: c.bid - c.paid > 0 ? C.yellow : C.green }}>{fmtD(c.bid - c.paid + (c.changeOrders || 0))}</td>
+                      <td style={{ padding: "10px 8px", color: (c.changeOrders || 0) > 0 ? C.red : C.muted }}>{fmtD(c.changeOrders || 0)}</td>
+                      <td style={{ padding: "10px 8px", textAlign: "center" }}>
+                        <button onClick={() => deleteContractor(c.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Trash2 size={14} color={C.red} /></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
+        {/* Pre-Rehab Photos */}
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>Pre-Rehab Inspection Photos</div>
+          </div>
+          {photos.length === 0 ? (
+            <div style={{ fontSize: 13, color: C.muted, padding: "16px 0", textAlign: "center" }}>No photos yet. Upload pre-rehab photos to document conditions.</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+              {photos.map(p => (
+                <div key={p.id} style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}` }}>
+                  <img src={p.dataUrl} alt={p.room} style={{ width: "100%", height: 100, objectFit: "cover" }} />
+                  <div style={{ padding: "6px 8px", fontSize: 11, fontWeight: 600, color: C.text, background: C.bg }}>
+                    {p.room.charAt(0).toUpperCase() + p.room.slice(1)} — {p.date}
+                  </div>
+                  <button onClick={() => deletePhoto(p.id)} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: 4, padding: 2, cursor: "pointer" }}><X size={12} color="#fff" /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* Progress Notes */}
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>Weekly Progress Notes</div>
+          </div>
+          {notes.length === 0 ? (
+            <div style={{ fontSize: 13, color: C.muted, padding: "16px 0", textAlign: "center" }}>No progress notes yet.</div>
+          ) : (
+            notes.map(n => (
+              <div key={n.id} style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.mutedLight, marginBottom: 4 }}>{n.date}</div>
+                  <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>{n.text}</div>
+                </div>
+                <button onClick={() => deleteNote(n.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}><Trash2 size={14} color={C.mutedLight} /></button>
+              </div>
+            ))
+          )}
+        </Card>
+      </div>
+    );
+  }
+
+  // List view
+  if (loading) return <div style={{ textAlign: "center", padding: 40, color: C.muted, fontSize: 14 }}>Loading active rehabs...</div>;
+
+  return (
+    <div>
+      {rehabs.length === 0 ? (
+        <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
+          <div style={{ marginBottom: 12, opacity: 0.3, display: "flex", justifyContent: "center" }}><Hammer size={36} color={C.green} /></div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.muted, lineHeight: 1.5 }}>No active rehabs yet.</div>
+          <div style={{ fontSize: 13, color: C.mutedLight, marginTop: 8 }}>When a Fix & Flip deal gets a green verdict, use "Start Rehab" to move it here.</div>
+        </div>
+      ) : (
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+          {rehabs.map((r, i) => {
+            const totalPaid = (r.contractors || []).reduce((s, c) => s + c.paid, 0);
+            const budget = r.projected?.rehabCost || 0;
+            const pct = budget > 0 ? Math.min((totalPaid / budget) * 100, 100) : 0;
+            return (
+              <div key={r.id} onClick={() => setActiveRehab(r)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px", borderBottom: i < rehabs.length - 1 ? `1px solid ${C.border}` : "none", cursor: "pointer" }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{r.address}</div>
+                  <div style={{ fontSize: 12, color: C.muted }}>
+                    {r.status === "closed" ? "Closed" : `${(r.contractors || []).length} contractors · ${(r.notes || []).length} notes`}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Budget</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: pct > 90 ? C.red : C.text }}>{pct.toFixed(0)}% used</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Spent</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{fmtD(totalPaid)}</div>
+                  </div>
+                  {r.status === "closed" && <span style={{ background: C.greenLight, color: C.green, padding: "3px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>CLOSED</span>}
+                  <ChevronRight size={16} color={C.mutedLight} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
 
 
@@ -3042,6 +3625,7 @@ const PIPELINE_NAV = [
 const PROPERTIES_NAV = [
   { id: "dashboard", label: "Dashboard" },
   { id: "overview", label: "Portfolio Overview" },
+  { id: "rehabs", label: "Active Rehabs" },
   { id: "cashflow", label: "Cash Flow Tracker" },
   { id: "tenants", label: "Tenant Tracker" },
   { id: "maintenance", label: "Maintenance Log" },
@@ -3061,6 +3645,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
   const [showRentAnalysis, setShowRentAnalysis] = useState(false);
   const [showCompTracker, setShowCompTracker] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [showFlipVsRent, setShowFlipVsRent] = useState(false);
   const [dashPanel, setDashPanel] = useState(null); // "settings" | "feedback" | null
   const [convertDeal, setConvertDeal] = useState(null); // deal object to convert to property
   const [convertForm, setConvertForm] = useState({ address: "", units: "1", monthlyRent: "", monthlyExpenses: "", loanBalance: "" });
@@ -3149,6 +3734,32 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
     setPropSaving(false);
     setPropModal(null);
     refreshProperties();
+  };
+
+  const startRehab = async (deal) => {
+    const inputs = deal.inputs || {};
+    const purchase = num(inputs.purchasePrice);
+    const rehab = num(inputs.rehabCost);
+    const holdMo = num(inputs.holdingMonths);
+    const holdCost = num(inputs.monthlyHolding) * holdMo;
+    const arv = num(inputs.arvEstimate);
+    const sellClose = arv * (num(inputs.closingCostsSell) / 100);
+    const res = await supabase.from("active_rehabs").insert({
+      user_id: session.user.id,
+      deal_id: deal.id,
+      address: deal.address || `Flip — ${fmtD(purchase)}`,
+      purchase_price: purchase,
+      projected: { rehabCost: rehab, holdingCost: holdCost, arv, sellClose, netProfit: deal.net_profit || 0 },
+      contractors: [],
+      notes: [],
+      photos: [],
+      status: "active",
+    }).select().single();
+    dbLog("active_rehabs.insert", res);
+    if (!res.error) {
+      setView("properties");
+      setPropertiesNav("rehabs");
+    }
   };
 
   const greenDeals = deals.filter(d => d.verdict === "green").length;
@@ -3251,6 +3862,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
         {showRehab && <RehabEstimator onClose={() => setShowRehab(false)} onUseCost={() => { setShowRehab(false); setPipelineNav("analyzer"); }} />}
         {showRentAnalysis && <RentAnalysisWorksheet onClose={() => setShowRentAnalysis(false)} onUseRent={() => { setShowRentAnalysis(false); setPipelineNav("analyzer"); }} />}
         {showCompTracker && <CompTrackerSheet onClose={() => setShowCompTracker(false)} onUseARV={() => { setShowCompTracker(false); setPipelineNav("analyzer"); }} />}
+        {showFlipVsRent && <FlipVsRentTool onClose={() => setShowFlipVsRent(false)} />}
 
         {/* More drawer — mobile only */}
         {showMore && (
@@ -3266,6 +3878,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
               <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border, margin: "0 auto 20px" }} />
               {[
                 { label: "Underwriting Worksheet", onClick: () => { setShowMore(false); setShowWorksheet(true); } },
+                { label: "Flip vs Rent", onClick: () => { setShowMore(false); setShowFlipVsRent(true); } },
                 { label: "Rehab Estimator", onClick: () => { setShowMore(false); setShowRehab(true); } },
                 { label: "Rent Analysis", onClick: () => { setShowMore(false); setShowRentAnalysis(true); } },
                 { label: "Comp Tracker", onClick: () => { setShowMore(false); setShowCompTracker(true); } },
@@ -3451,6 +4064,9 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{metric}</span>
                         <DashVerdictBadge verdict={d.verdict} />
+                        {d.verdict === "green" && d.deal_type === "flip" && (
+                          <button onClick={() => startRehab(d)} style={{ background: "#f59e0b", border: "none", borderRadius: 6, padding: "5px 10px", color: C.white, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>Start Rehab</button>
+                        )}
                         {d.verdict === "green" && (
                           <button onClick={() => openConvert(d)} style={{ background: C.green, border: "none", borderRadius: 6, padding: "5px 10px", color: C.white, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>Convert</button>
                         )}
@@ -3486,6 +4102,9 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                             <div style={{ textAlign: "right" }}><div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Profit</div><div style={{ fontSize: 14, fontWeight: 700, color: C.greenDark }}>{d.net_profit ? fmtD(d.net_profit) : "—"}</div></div>
                             <div style={{ textAlign: "right" }}><div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>ROI</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{d.roi ? fmtP(d.roi) : "—"}</div></div>
                           </>
+                        )}
+                        {d.deal_type === "flip" && (
+                          <button onClick={() => startRehab(d)} style={{ background: "#f59e0b", border: "none", borderRadius: 6, padding: "6px 12px", color: C.white, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>Start Rehab</button>
                         )}
                         <button onClick={() => openConvert(d)} style={{ background: C.green, border: "none", borderRadius: 6, padding: "6px 12px", color: C.white, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>Convert to Property</button>
                       </div>
@@ -3573,7 +4192,10 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                     <DashVerdictBadge verdict={d.verdict} />
                     <span style={{ fontSize: 14, fontWeight: 700, color: C.text, textAlign: "right" }}>{metric}</span>
                     {d.verdict === "green" && (
-                      <button onClick={() => openConvert(d)} style={{ background: C.green, border: "none", borderRadius: 6, padding: "5px 10px", color: C.white, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap", marginLeft: 8 }}>Convert</button>
+                      <div style={{ display: "flex", gap: 4, marginLeft: 8 }}>
+                        {d.deal_type === "flip" && <button onClick={() => startRehab(d)} style={{ background: "#f59e0b", border: "none", borderRadius: 6, padding: "5px 10px", color: C.white, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>Rehab</button>}
+                        <button onClick={() => openConvert(d)} style={{ background: C.green, border: "none", borderRadius: 6, padding: "5px 10px", color: C.white, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>Convert</button>
+                      </div>
                     )}
                   </div>
                   );
@@ -3587,23 +4209,22 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           {!dashPanel && pipelineNav === "tools" && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
               {[
-                { name: "Underwriting Worksheet", desc: "Build confidence in your purchase price using comparable sales.", clickable: true },
-                { name: "Rehab Estimator", desc: "Room-by-room cost builder. Stop guessing your rehab budget.", soon: true },
-                { name: "Rent Analysis", desc: "Compare rents for similar properties in your market.", soon: true },
-                { name: "Comp Tracker", desc: "Track comparable sales to build a confident ARV.", soon: true },
+                { name: "Underwriting Worksheet", desc: "Build confidence in your purchase price using comparable sales.", onClick: () => setShowWorksheet(true) },
+                { name: "Flip vs Rent", desc: "Compare selling now vs holding as a rental — side by side with 5-year projections.", onClick: () => setShowFlipVsRent(true) },
+                { name: "Rehab Estimator", desc: "Room-by-room cost builder. Stop guessing your rehab budget.", onClick: () => setShowRehab(true) },
+                { name: "Rent Analysis", desc: "Compare rents for similar properties in your market.", onClick: () => setShowRentAnalysis(true) },
+                { name: "Comp Tracker", desc: "Track comparable sales to build a confident ARV.", onClick: () => setShowCompTracker(true) },
               ].map((tool, i) => (
-                <div key={i} onClick={tool.clickable ? () => setShowWorksheet(true) : undefined} style={{
+                <div key={i} onClick={tool.onClick} style={{
                   background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
-                  padding: "20px 18px", cursor: tool.clickable ? "pointer" : "default",
+                  padding: "20px 18px", cursor: "pointer",
                   transition: "all 0.15s",
                 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: tool.soon ? C.mutedLight : C.text }}>{tool.name}</div>
-                    {tool.soon && <span style={{ fontSize: 10, fontWeight: 600, color: C.mutedLight, background: C.bg, padding: "3px 8px", borderRadius: 4 }}>Soon</span>}
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{tool.name}</div>
                   </div>
-                  <div style={{ fontSize: 13, color: tool.soon ? C.mutedLight : C.muted, lineHeight: 1.5 }}>{tool.desc}</div>
-                  {tool.clickable && <div style={{ fontSize: 12, color: C.green, fontWeight: 700, marginTop: 12, display: "flex", alignItems: "center", gap: 4 }}>Open Worksheet <ArrowRight size={12} color={C.green} /></div>}
-                  {tool.soon && <div style={{ fontSize: 12, color: C.mutedLight, marginTop: 12 }}>Coming soon</div>}
+                  <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>{tool.desc}</div>
+                  <div style={{ fontSize: 12, color: C.green, fontWeight: 700, marginTop: 12, display: "flex", alignItems: "center", gap: 4 }}>Open <ArrowRight size={12} color={C.green} /></div>
                 </div>
               ))}
             </div>
@@ -3931,6 +4552,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
             </>
           )}
 
+          {!dashPanel && propertiesNav === "rehabs" && <ActiveRehabs session={session} />}
           {!dashPanel && propertiesNav === "cashflow" && <CashFlowTracker session={session} />}
           {!dashPanel && propertiesNav === "tenants" && <TenantTracker session={session} />}
           {!dashPanel && propertiesNav === "maintenance" && <MaintenanceLog session={session} />}
@@ -3982,6 +4604,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
             }}>
               <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border, margin: "0 auto 20px" }} />
               {[
+                { id: "rehabs", label: "Active Rehabs" },
                 { id: "cashflow", label: "Cash Flow Tracker" },
                 { id: "financing", label: "Financing Tracker" },
                 { id: "leases", label: "Lease Renewals" },
