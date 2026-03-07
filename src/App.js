@@ -1646,6 +1646,7 @@ const _emptyState = (msg, btnLabel, onClick) => (
 
 function CashFlowTracker({ session }) {
   const [records, setRecords] = useState([]);
+  const [maintenanceCosts, setMaintenanceCosts] = useState([]); // closed maintenance items with costs
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState(null); // null | { editing?: index }
@@ -1654,8 +1655,16 @@ function CashFlowTracker({ session }) {
 
   useEffect(() => {
     if (!session) return;
-    supabase.from("cash_flow_entries").select("*").order("created_at", { ascending: false })
-      .then(res => { dbLog("cash_flow_entries.select", res); setRecords((res.data || []).map(r => ({ ...r, month: r.month, property: r.property_id || "", projected: r.projected_cash_flow || 0, actual: (r.actual_rent || 0) - (r.actual_expenses || 0) }))); setLoading(false); });
+    Promise.all([
+      supabase.from("cash_flow_entries").select("*").order("created_at", { ascending: false }),
+      supabase.from("maintenance_items").select("*").eq("status", "closed"),
+    ]).then(([cfRes, maintRes]) => {
+      dbLog("cash_flow_entries.select", cfRes);
+      dbLog("maintenance_items.closed(for cashflow)", maintRes);
+      setRecords((cfRes.data || []).map(r => ({ ...r, month: r.month, property: r.property_id || "", projected: r.projected_cash_flow || 0, actual: (r.actual_rent || 0) - (r.actual_expenses || 0) })));
+      setMaintenanceCosts((maintRes.data || []).filter(m => m.cost > 0));
+      setLoading(false);
+    });
   }, [session]);
 
   const openAdd = () => { setForm({ month: "", property: "", projected: "", actual: "" }); setModal({}); };
@@ -1683,9 +1692,20 @@ function CashFlowTracker({ session }) {
   const properties = ["all", ...[...new Set(records.map(r => r.property))]];
   const filtered = selectedProperty === "all" ? records : records.filter(r => r.property === selectedProperty);
   const months = [...new Set(records.map(r => r.month))];
+  // Group closed maintenance costs by property and month (using closed_date month name)
+  const getMaintenanceCostForMonth = (month, property) => {
+    return maintenanceCosts.filter(m => {
+      if (property !== "all" && m.property_id !== property) return false;
+      if (!m.closed_date) return false;
+      // Match by month name from closed_date (e.g. "Jan", "Feb")
+      const closedMonth = new Date(m.closed_date).toLocaleDateString("en-US", { month: "short" });
+      return closedMonth.toLowerCase().startsWith(month.toLowerCase().slice(0, 3)) || month.toLowerCase().startsWith(closedMonth.toLowerCase().slice(0, 3));
+    }).reduce((s, m) => s + (m.cost || 0), 0);
+  };
   const monthlyTotals = months.map(m => {
     const rows = filtered.filter(r => r.month === m);
-    return { month: m, projected: rows.reduce((s, r) => s + r.projected, 0), actual: rows.reduce((s, r) => s + r.actual, 0) };
+    const maintCost = getMaintenanceCostForMonth(m, selectedProperty);
+    return { month: m, projected: rows.reduce((s, r) => s + r.projected, 0), actual: rows.reduce((s, r) => s + r.actual, 0) - maintCost, maintenanceCost: maintCost };
   });
   const totalProjected = monthlyTotals.reduce((s, m) => s + m.projected, 0);
   const totalActual = monthlyTotals.reduce((s, m) => s + m.actual, 0);
@@ -1772,7 +1792,10 @@ function CashFlowTracker({ session }) {
             <div key={m.month} style={{ ...rowStyle, borderBottom: i < monthlyTotals.length - 1 ? `1px solid ${C.border}` : "none" }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{m.month}</span>
               <span style={{ fontSize: 13, color: C.muted }}>{fmtD(m.projected)}</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{fmtD(m.actual)}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                {fmtD(m.actual)}
+                {m.maintenanceCost > 0 && <span style={{ fontSize: 10, color: C.yellow, fontWeight: 600, marginLeft: 4 }}>(-{fmtD(m.maintenanceCost)} maint.)</span>}
+              </span>
               <span style={{ fontSize: 13, fontWeight: 700, color: variance >= 0 ? C.green : C.red, textAlign: "right" }}>{variance >= 0 ? "+" : ""}{fmtD(variance)}</span>
               <span style={{ textAlign: "right" }}>{idx >= 0 && <button onClick={() => openEdit(idx)} style={_editBtn}>Edit</button>}</span>
             </div>
@@ -1801,6 +1824,9 @@ function TenantTracker({ session }) {
   const [filter, setFilter] = useState("all");
   const [modal, setModal] = useState(null);
   const [payModal, setPayModal] = useState(null);
+  const [inspectionModal, setInspectionModal] = useState(null); // { tenantId, tenantName, property, unit }
+  const [inspectionForm, setInspectionForm] = useState({ moveOutDate: "", inspectionDate: "", condition: "good", damagesNote: "", depositRefund: "" });
+  const [inspectionSaving, setInspectionSaving] = useState(false);
   const [form, setForm] = useState({ name: "", property: "", unit: "", rent: "", status: "current", leaseEnd: "", phone: "" });
   const [payForm, setPayForm] = useState({ amount: "", dueDate: "", paidDate: "", month: "", notes: "" });
 
@@ -1822,23 +1848,27 @@ function TenantTracker({ session }) {
   const openEdit = (id) => { const t = tenants.find(x => x.id === id); setForm({ name: t.name, property: t.property, unit: t.unit, rent: String(t.rent), status: t.status, leaseEnd: t.leaseEnd, phone: t.phone }); setModal({ editing: id }); };
   const save = async () => {
     if (!form.name || !form.property) return;
-    console.log("[TENANT SAVE] session:", session ? "exists" : "NULL", "user.id:", session?.user?.id || "NONE");
-    console.log("[TENANT SAVE] auth.uid check:", (await supabase.auth.getUser()).data?.user?.id || "NO AUTH USER");
     setSaving(true);
     const entry = { name: form.name, property: form.property, unit: form.unit, rent: num(form.rent), status: form.status, leaseEnd: form.leaseEnd, phone: form.phone };
+    const previousStatus = modal.editing !== undefined ? (tenants.find(t => t.id === modal.editing) || {}).status : null;
     if (modal.editing !== undefined) {
       const res = await supabase.from("tenants").update({ name: entry.name, property_id: entry.property, unit_number: entry.unit, monthly_rent: entry.rent, status: entry.status, lease_end: entry.leaseEnd || null, phone: entry.phone }).eq("id", modal.editing).select().single();
       dbLog("tenants.update", res);
       setTenants(prev => prev.map(t => t.id === modal.editing ? { ...t, ...entry } : t));
     } else {
       const payload = { user_id: session.user.id, name: entry.name, property_id: entry.property, unit_number: entry.unit, monthly_rent: entry.rent, status: entry.status, lease_end: entry.leaseEnd || null, phone: entry.phone };
-      console.log("[TENANT SAVE] insert payload:", JSON.stringify(payload));
       const res = await supabase.from("tenants").insert(payload).select().single();
       dbLog("tenants.insert", res);
       setTenants(prev => [{ ...entry, id: res.data?.id || Date.now() }, ...prev]);
     }
     setSaving(false);
+    const savedId = modal.editing || tenants[tenants.length - 1]?.id;
     setModal(null);
+    // Trigger move-out inspection flow when status changes to "vacating"
+    if (entry.status === "vacating" && previousStatus !== "vacating") {
+      setInspectionForm({ moveOutDate: entry.leaseEnd || "", inspectionDate: "", condition: "good", damagesNote: "", depositRefund: String(entry.rent) });
+      setInspectionModal({ tenantId: savedId, tenantName: entry.name, property: entry.property, unit: entry.unit });
+    }
   };
 
   const openPayment = (tenantId) => { setPayForm({ amount: "", dueDate: "", paidDate: "", month: "", notes: "" }); setPayModal({ tenantId }); };
@@ -1851,6 +1881,25 @@ function TenantTracker({ session }) {
     if (res.data) setPayments(prev => [res.data, ...prev]);
     setSaving(false);
     setPayModal(null);
+  };
+
+  const saveInspection = async () => {
+    if (!inspectionModal) return;
+    setInspectionSaving(true);
+    // Log the inspection as a maintenance item for record-keeping
+    const res = await supabase.from("maintenance_items").insert({
+      user_id: session.user.id,
+      property_id: inspectionModal.property,
+      unit_number: inspectionModal.unit,
+      title: `Move-Out Inspection — ${inspectionModal.tenantName}`,
+      description: `Condition: ${inspectionForm.condition}${inspectionForm.damagesNote ? `. Damages: ${inspectionForm.damagesNote}` : ""}. Move-out: ${inspectionForm.moveOutDate}. Deposit refund: $${inspectionForm.depositRefund}`,
+      priority: inspectionForm.condition === "poor" ? "urgent" : "normal",
+      status: "open",
+      reported_date: inspectionForm.inspectionDate || new Date().toISOString().split("T")[0],
+    }).select().single();
+    dbLog("maintenance_items.inspection", res);
+    setInspectionSaving(false);
+    setInspectionModal(null);
   };
 
   const getPaymentStatus = (p) => {
@@ -1920,6 +1969,36 @@ function TenantTracker({ session }) {
         </div></div>
       )}
 
+      {inspectionModal && (
+        <div style={_modalOverlay}><div style={_modalBox}>
+          {_modalHeader("Move-Out Inspection", () => setInspectionModal(null))}
+          <div style={{ background: C.yellowLight, border: `1px solid ${C.yellowBorder}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.yellowDark }}>
+              <AlertTriangle size={14} color={C.yellowDark} style={{ verticalAlign: "middle", marginRight: 6 }} />
+              {inspectionModal.tenantName} is vacating {inspectionModal.property}{inspectionModal.unit ? ` Unit ${inspectionModal.unit}` : ""}
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Move-Out Date</label><input type="date" value={inspectionForm.moveOutDate} onChange={e => setInspectionForm(p => ({ ...p, moveOutDate: e.target.value }))} style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Inspection Date</label><input type="date" value={inspectionForm.inspectionDate} onChange={e => setInspectionForm(p => ({ ...p, inspectionDate: e.target.value }))} style={_modalInput} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Unit Condition</label>
+              <select value={inspectionForm.condition} onChange={e => setInspectionForm(p => ({ ...p, condition: e.target.value }))} style={{ ..._modalInput, cursor: "pointer" }}>
+                <option value="excellent">Excellent</option>
+                <option value="good">Good</option>
+                <option value="fair">Fair — Minor Repairs</option>
+                <option value="poor">Poor — Major Repairs</option>
+              </select>
+            </div>
+            <div><label style={_modalLabel}>Deposit Refund</label><input type="number" value={inspectionForm.depositRefund} onChange={e => setInspectionForm(p => ({ ...p, depositRefund: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+          </div>
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Damages / Notes</label><input value={inspectionForm.damagesNote} onChange={e => setInspectionForm(p => ({ ...p, damagesNote: e.target.value }))} placeholder="e.g. Carpet stains, wall damage" style={_modalInput} /></div>
+          <button onClick={saveInspection} disabled={inspectionSaving} style={{ ..._modalSubmit(), opacity: inspectionSaving ? 0.7 : 1 }}>{inspectionSaving ? "Saving..." : "Save Inspection"}</button>
+          <button onClick={() => setInspectionModal(null)} style={{ width: "100%", padding: "10px", background: "none", border: `1px solid ${C.border}`, borderRadius: 10, color: C.muted, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginTop: 8 }}>Skip for Now</button>
+        </div></div>
+      )}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {["all", "active", ...STATUSES].map(f => (
@@ -1939,11 +2018,17 @@ function TenantTracker({ session }) {
       <div style={{ display: "grid", gap: 12 }}>
         {filtered.map(t => {
           const tenantPayments = payments.filter(p => p.tenant_id === t.id).slice(0, 4);
+          const hasOverduePayment = payments.some(p => p.tenant_id === t.id && !p.paid_date && new Date(p.due_date) < new Date());
+          const leaseEndDays = t.leaseEnd ? Math.round((new Date(t.leaseEnd) - new Date()) / (24 * 60 * 60 * 1000)) : null;
           return (
-          <div key={t.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px", opacity: t.status === "past_tenant" ? 0.6 : 1 }}>
+          <div key={t.id} style={{ background: C.white, border: `1px solid ${hasOverduePayment ? C.red + "44" : C.border}`, borderRadius: 12, padding: "16px 18px", opacity: t.status === "past_tenant" ? 0.6 : 1 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{t.name}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{t.name}</span>
+                  {hasOverduePayment && <span style={{ background: C.redLight, color: C.red, fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, letterSpacing: "0.04em" }}>LATE</span>}
+                  {leaseEndDays !== null && leaseEndDays > 0 && leaseEndDays <= 90 && <span style={{ background: leaseEndDays <= 30 ? C.redLight : C.yellowLight, color: leaseEndDays <= 30 ? C.red : C.yellowDark, fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, letterSpacing: "0.04em" }}>LEASE {leaseEndDays}d</span>}
+                </div>
                 <div style={{ fontSize: 12, color: C.muted }}>{t.property} — Unit {t.unit}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2073,15 +2158,19 @@ function FinancingTracker({ session }) {
           const isBalloon = l.type.includes("Balloon");
           const monthsLeft = l.maturity ? Math.max(0, Math.round((new Date(l.maturity) - new Date()) / (30 * 24 * 60 * 60 * 1000))) : 0;
           return (
-            <div key={l.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
+            <div key={l.id} style={{ background: C.white, border: `1px solid ${isBalloon && monthsLeft <= 3 ? C.red + "55" : isBalloon && monthsLeft <= 12 ? C.yellow + "55" : C.border}`, borderRadius: 12, padding: "16px 18px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{l.property}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{l.property}</span>
+                    {isBalloon && monthsLeft <= 3 && <span style={{ background: C.redLight, color: C.red, fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>CRITICAL</span>}
+                    {isBalloon && monthsLeft > 3 && monthsLeft <= 12 && <span style={{ background: C.yellowLight, color: C.yellowDark, fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>DUE SOON</span>}
+                  </div>
                   <div style={{ fontSize: 12, color: C.muted }}>{l.lender}</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <button onClick={() => openEdit(l.id)} style={_editBtn}>Edit</button>
-                  <span style={{ background: isBalloon ? C.yellowLight : C.greenLight, color: isBalloon ? C.yellowDark : C.greenDark, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, letterSpacing: "0.04em" }}>{l.type.toUpperCase()}</span>
+                  <span style={{ background: isBalloon ? (monthsLeft <= 3 ? C.redLight : monthsLeft <= 12 ? C.yellowLight : C.yellowLight) : C.greenLight, color: isBalloon ? (monthsLeft <= 3 ? C.red : C.yellowDark) : C.greenDark, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, letterSpacing: "0.04em" }}>{l.type.toUpperCase()}</span>
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
@@ -2207,6 +2296,19 @@ function LeaseRenewalTracker({ session }) {
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
         <button onClick={openAdd} style={_addBtn}>+ Add Lease</button>
       </div>
+
+      {expiring30 > 0 && (
+        <div style={{ background: C.redLight, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <AlertTriangle size={18} color={C.red} />
+          <div style={{ fontSize: 13, color: C.red, lineHeight: 1.5, fontWeight: 600 }}>{expiring30} lease{expiring30 > 1 ? "s" : ""} expiring within 30 days — renewal action needed</div>
+        </div>
+      )}
+      {expiring90 > expiring30 && (
+        <div style={{ background: C.yellowLight, border: `1px solid ${C.yellow}44`, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <AlertTriangle size={18} color={C.yellowDark} />
+          <div style={{ fontSize: 13, color: C.yellowDark, lineHeight: 1.5, fontWeight: 600 }}>{expiring90 - expiring30} additional lease{expiring90 - expiring30 > 1 ? "s" : ""} expiring within 90 days</div>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
         <DashStatCard label="Total Leases" value={leases.length} />
@@ -2797,6 +2899,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
   const [dealsLoading, setDealsLoading] = useState(true);
   const [propsLoading, setPropsLoading] = useState(true);
   const [briefingTenants, setBriefingTenants] = useState([]);
+  const [briefingPayments, setBriefingPayments] = useState([]);
   const [briefingLeases, setBriefingLeases] = useState([]);
   const [briefingLoans, setBriefingLoans] = useState([]);
   const [briefingMaintenance, setBriefingMaintenance] = useState([]);
@@ -2812,6 +2915,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
     supabase.from("properties").select("*").order("created_at", { ascending: false })
       .then(res => { dbLog("dashboard.properties", res); setProperties(res.data || []); setPropsLoading(false); });
     supabase.from("tenants").select("*").then(res => { dbLog("dashboard.tenants", res); setBriefingTenants(res.data || []); });
+    supabase.from("payment_history").select("*").order("due_date", { ascending: false }).then(res => { dbLog("dashboard.payments", res); setBriefingPayments(res.data || []); });
     supabase.from("leases").select("*").then(res => { dbLog("dashboard.leases", res); setBriefingLeases(res.data || []); });
     supabase.from("loans").select("*").then(res => { dbLog("dashboard.loans", res); setBriefingLoans(res.data || []); });
     supabase.from("maintenance_items").select("*").then(res => { dbLog("dashboard.maintenance", res); setBriefingMaintenance(res.data || []); });
@@ -2877,8 +2981,13 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
   const yellowDeals = deals.filter(d => d.verdict === "yellow").length;
 
   const totalRent = properties.reduce((s, p) => s + (p.monthly_rent || 0), 0);
-  const totalCashFlow = properties.reduce((s, p) => s + ((p.monthly_rent || 0) - (p.monthly_expenses || 0)), 0);
-  const lateCount = briefingTenants.filter(t => t.status === "late").length;
+  // Factor in closed maintenance costs as actual expenses for total cash flow
+  const closedMaintenanceCosts = briefingMaintenance.filter(m => m.status === "closed" && m.cost > 0).reduce((s, m) => s + m.cost, 0);
+  const totalCashFlow = properties.reduce((s, p) => s + ((p.monthly_rent || 0) - (p.monthly_expenses || 0)), 0) - closedMaintenanceCosts;
+  // Auto-detect late: tenants with status "late" OR tenants with unpaid overdue payments
+  const now = new Date();
+  const overduePaymentTenantIds = new Set(briefingPayments.filter(p => !p.paid_date && new Date(p.due_date) < now).map(p => p.tenant_id));
+  const lateCount = briefingTenants.filter(t => t.status === "late" || overduePaymentTenantIds.has(t.id)).length;
   const openMaintenance = briefingMaintenance.filter(m => m.status === "open").length;
 
   const sidebarStyle = {
@@ -3168,6 +3277,9 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{metric}</span>
                         <DashVerdictBadge verdict={d.verdict} />
+                        {d.verdict === "green" && (
+                          <button onClick={() => openConvert(d)} style={{ background: C.green, border: "none", borderRadius: 6, padding: "5px 10px", color: C.white, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>Convert</button>
+                        )}
                       </div>
                     </div>
                     );
@@ -3278,7 +3390,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                   const metric = d.deal_type === "hold" ? (d.cash_flow ? fmtD(d.cash_flow) + "/mo" : "—") : (d.net_profit ? fmtD(d.net_profit) : "—");
                   const dateStr = d.created_at ? new Date(d.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
                   return (
-                  <div key={d.id} className="db-deal-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", padding: "14px 16px", borderBottom: i < deals.length - 1 ? `1px solid ${C.border}` : "none", alignItems: "center" }}>
+                  <div key={d.id} className="db-deal-row" style={{ display: "grid", gridTemplateColumns: d.verdict === "green" ? "2fr 1fr 1fr 1fr auto" : "2fr 1fr 1fr 1fr", padding: "14px 16px", borderBottom: i < deals.length - 1 ? `1px solid ${C.border}` : "none", alignItems: "center" }}>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{d.address}</div>
                       <div style={{ fontSize: 12, color: C.muted }}>{dateStr}</div>
@@ -3286,6 +3398,9 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                     <span className="db-deal-type" style={{ fontSize: 13, color: C.muted }}>{d.deal_type === "hold" ? "Buy & Hold" : "Fix & Flip"}</span>
                     <DashVerdictBadge verdict={d.verdict} />
                     <span style={{ fontSize: 14, fontWeight: 700, color: C.text, textAlign: "right" }}>{metric}</span>
+                    {d.verdict === "green" && (
+                      <button onClick={() => openConvert(d)} style={{ background: C.green, border: "none", borderRadius: 6, padding: "5px 10px", color: C.white, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap", marginLeft: 8 }}>Convert</button>
+                    )}
                   </div>
                   );
                 })}
@@ -3420,7 +3535,8 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           {dashPanel === "settings" && <DashSettingsPanel standards={standards} onSaveStandards={onSaveStandards} defaultMode={mode} onSetDefaultMode={setMode} onSignOut={onSignOut} />}
           {dashPanel === "feedback" && <FeedbackPanel />}
           {!dashPanel && propertiesNav === "dashboard" && (() => {
-            const lateTenants = briefingTenants.filter(t => t.status === "late");
+            const overdueIds = new Set(briefingPayments.filter(p => !p.paid_date && new Date(p.due_date) < new Date()).map(p => p.tenant_id));
+            const lateTenants = briefingTenants.filter(t => t.status === "late" || overdueIds.has(t.id));
             const expiring60 = briefingLeases.filter(l => {
               if (!l.lease_end) return false;
               const days = Math.round((new Date(l.lease_end) - new Date()) / (24 * 60 * 60 * 1000));
