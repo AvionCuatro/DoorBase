@@ -455,7 +455,7 @@ function EmailResultsModal({ onClose, result, mode }) {
 const HERO_IMG = "/hero.png";
 
 // ─── PRO TRIGGER ──────────────────────────────────────────────────────────────
-function ProTrigger({ text, onScrollToPro }) {
+function ProTrigger({ text, onScrollToPro, isPro }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -471,15 +471,17 @@ function ProTrigger({ text, onScrollToPro }) {
         transition: "all 0.15s",
       }}
     >
-      <span style={{ fontSize: 12 }}>⭐</span>
+      {isPro
+        ? <ChevronRight size={12} color={C.green} />
+        : <span style={{ fontSize: 12 }}>⭐</span>}
       <span style={{ fontSize: 12, color: C.greenDark, fontWeight: 600, lineHeight: 1.4 }}>{text}</span>
-      <span style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>Pro →</span>
+      {!isPro && <span style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>Pro →</span>}
     </div>
   );
 }
 
 // ─── FIELD ────────────────────────────────────────────────────────────────────
-function Field({ label, value, onChange, prefix = "$", suffix = "", proTip, onScrollToPro }) {
+function Field({ label, value, onChange, prefix = "$", suffix = "", proTip, onScrollToPro, isPro }) {
   const [focused, setFocused] = useState(false);
   return (
     <div style={{ marginBottom: 4 }}>
@@ -511,7 +513,7 @@ function Field({ label, value, onChange, prefix = "$", suffix = "", proTip, onSc
       </div>
       {proTip && (
         <div style={{ overflow: "hidden", maxHeight: focused ? 40 : 0, opacity: focused ? 1 : 0, transition: "all 0.2s ease" }}>
-          <ProTrigger text={proTip} onScrollToPro={onScrollToPro} />
+          <ProTrigger text={proTip} onScrollToPro={onScrollToPro} isPro={isPro} />
         </div>
       )}
     </div>
@@ -704,7 +706,6 @@ function UnderwritingWorksheet({ onClose, onUsePrice }) {
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
           <div>
-            <div style={{ display: "inline-block", background: C.greenLight, borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: C.greenDark, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>Pro Tool</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Deal Underwriting Worksheet</div>
             <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>Build confidence in your purchase price using comparable sales.</div>
           </div>
@@ -946,7 +947,7 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
       <div>
         <Card>
           <SectionTitle>Purchase & Financing</SectionTitle>
-          <Field label="Purchase Price" value={f.purchasePrice} onChange={set("purchasePrice")}
+          <Field label="Purchase Price" value={f.purchasePrice} onChange={set("purchasePrice")} isPro={isPro}
             proTip="Not sure what to offer? Use the Underwriting Worksheet."
             onScrollToPro={isPro ? () => setShowWorksheet(true) : onUpgrade} />
           <div style={{ height: 8 }} />
@@ -959,14 +960,14 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
         </Card>
         <Card>
           <SectionTitle>Income</SectionTitle>
-          <Field label="Monthly Rent" value={f.monthlyRent} onChange={set("monthlyRent")}
+          <Field label="Monthly Rent" value={f.monthlyRent} onChange={set("monthlyRent")} isPro={isPro}
             proTip="Not sure what this rents for? Use the Rent Analysis Worksheet."
             onScrollToPro={isPro ? () => setShowRentAnalysis(true) : onUpgrade} />
           <div style={{ height: 8 }} />
           <TwoCol>
             <Field label="Other Income / Mo" value={f.otherIncome} onChange={set("otherIncome")} />
-            <Field label="Vacancy Rate" value={f.vacancy} onChange={set("vacancy")} prefix="%" suffix=""
-              proTip="Pro tracks actual vacancy history across all your doors."
+            <Field label="Vacancy Rate" value={f.vacancy} onChange={set("vacancy")} prefix="%" suffix="" isPro={isPro}
+              proTip={isPro ? "Track actual vacancy history in your Properties." : "Pro tracks actual vacancy history across all your doors."}
               onScrollToPro={onScrollToPro} />
           </TwoCol>
         </Card>
@@ -974,21 +975,21 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
           <SectionTitle>Expenses</SectionTitle>
           <TwoCol>
             <Field label="Property Tax / Yr" value={f.propertyTax} onChange={set("propertyTax")} />
-            <Field label="Insurance / Yr" value={f.insurance} onChange={set("insurance")}
-              proTip="Pro includes an Insurance Comparison Sheet."
+            <Field label="Insurance / Yr" value={f.insurance} onChange={set("insurance")} isPro={isPro}
+              proTip={isPro ? "Compare insurance quotes in the Underwriting Worksheet." : "Pro includes an Insurance Comparison Sheet."}
               onScrollToPro={onScrollToPro} />
           </TwoCol>
           <div style={{ height: 8 }} />
           <TwoCol>
             <Field label="HOA / Mo" value={f.hoa} onChange={set("hoa")} />
-            <Field label="Maintenance / Mo" value={f.maintenance} onChange={set("maintenance")}
-              proTip="Pro tracks every maintenance request with full paper trail."
+            <Field label="Maintenance / Mo" value={f.maintenance} onChange={set("maintenance")} isPro={isPro}
+              proTip={isPro ? "Track maintenance requests in the Maintenance Tracker." : "Pro tracks every maintenance request with full paper trail."}
               onScrollToPro={onScrollToPro} />
           </TwoCol>
           <div style={{ height: 8 }} />
           <TwoCol>
-            <Field label="Mgmt Fee" value={f.mgmt} onChange={set("mgmt")} prefix="%" suffix=""
-              proTip="Compare property managers side-by-side with Pro."
+            <Field label="Mgmt Fee" value={f.mgmt} onChange={set("mgmt")} prefix="%" suffix="" isPro={isPro}
+              proTip={isPro ? "Compare property managers in the Underwriting Worksheet." : "Compare property managers side-by-side with Pro."}
               onScrollToPro={onScrollToPro} />
             <Field label="Utilities / Mo" value={f.utilities} onChange={set("utilities")} />
           </TwoCol>
@@ -1029,20 +1030,22 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
             color: C.green, fontSize: 14, fontWeight: 700, cursor: "pointer",
             fontFamily: "'DM Sans', sans-serif", marginBottom: 10,
           }}><MessageSquare size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />Email My Results</button>
-          <div onClick={onScrollToPro} style={{
-            background: "linear-gradient(135deg, #15803d, #16a34a)", borderRadius: 12,
-            padding: "16px", cursor: "pointer", textAlign: "center",
-          }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: C.white, marginBottom: 4 }}>
-              {result.verdict === "green" ? "Ready to manage this one?" : "Keep building your pipeline."}
+          {!isPro && (
+            <div onClick={onScrollToPro} style={{
+              background: "linear-gradient(135deg, #15803d, #16a34a)", borderRadius: 12,
+              padding: "16px", cursor: "pointer", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: C.white, marginBottom: 4 }}>
+                {result.verdict === "green" ? "Ready to manage this one?" : "Keep building your pipeline."}
+              </div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginBottom: 10 }}>
+                {result.verdict === "green" ? "Pro gives you the full operating system after you close." : "Pro saves every deal. Compare side by side."}
+              </div>
+              <div style={{ background: C.white, borderRadius: 8, padding: "8px 20px", display: "inline-block", fontSize: 13, fontWeight: 700, color: C.green }}>
+                See what Pro includes →
+              </div>
             </div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginBottom: 10 }}>
-              {result.verdict === "green" ? "Pro gives you the full operating system after you close." : "Pro saves every deal. Compare side by side."}
-            </div>
-            <div style={{ background: C.white, borderRadius: 8, padding: "8px 20px", display: "inline-block", fontSize: 13, fontWeight: 700, color: C.green }}>
-              See what Pro includes →
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>
@@ -1154,7 +1157,6 @@ function RehabEstimator({ onClose, onUseCost }) {
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
           <div>
-            <div style={{ display: "inline-block", background: C.greenLight, borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: C.greenDark, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>Pro Tool</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Rehab Estimator</div>
             <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>Build your rehab budget room by room. Enter only what applies — skip the rest.</div>
           </div>
@@ -1389,7 +1391,7 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
           <div style={{ height: 8 }} />
           <TwoCol>
             <Field label="Buy Closing Costs" value={f.closingCostsBuy} onChange={set("closingCostsBuy")} prefix="%" suffix="" />
-            <Field label="Rehab / Repair Cost" value={f.rehabCost} onChange={set("rehabCost")}
+            <Field label="Rehab / Repair Cost" value={f.rehabCost} onChange={set("rehabCost")} isPro={isPro}
               proTip="Don't guess rehab. Use the Rehab Estimator."
               onScrollToPro={isPro ? () => setShowRehab(true) : onUpgrade} />
           </TwoCol>
@@ -1397,22 +1399,22 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
         <Card>
           <SectionTitle>Holding Costs</SectionTitle>
           <TwoCol>
-            <Field label="Hold Period" value={f.holdingMonths} onChange={set("holdingMonths")} prefix="" suffix="mo"
-              proTip="Pro includes a Project Timeline Tracker for your flip."
+            <Field label="Hold Period" value={f.holdingMonths} onChange={set("holdingMonths")} prefix="" suffix="mo" isPro={isPro}
+              proTip={isPro ? "Use the Holding Cost Calculator to plan your timeline." : "Pro includes a Project Timeline Tracker for your flip."}
               onScrollToPro={onScrollToPro} />
             <Field label="Monthly Hold Cost" value={f.monthlyHolding} onChange={set("monthlyHolding")} />
           </TwoCol>
           <div style={{ height: 8 }} />
           <TwoCol>
             <Field label="Finance Amount" value={f.financeAmt} onChange={set("financeAmt")} />
-            <Field label="Interest Rate" value={f.interestRate} onChange={set("interestRate")} prefix="%" suffix=""
-              proTip="Compare hard money lenders side by side with Pro."
+            <Field label="Interest Rate" value={f.interestRate} onChange={set("interestRate")} prefix="%" suffix="" isPro={isPro}
+              proTip={isPro ? "Compare hard money lenders in the Underwriting Worksheet." : "Compare hard money lenders side by side with Pro."}
               onScrollToPro={onScrollToPro} />
           </TwoCol>
         </Card>
         <Card>
           <SectionTitle>Exit</SectionTitle>
-          <Field label="After Repair Value (ARV)" value={f.arvEstimate} onChange={set("arvEstimate")}
+          <Field label="After Repair Value (ARV)" value={f.arvEstimate} onChange={set("arvEstimate")} isPro={isPro}
             proTip="Build a confident ARV with the Comp Tracker."
             onScrollToPro={isPro ? () => setShowCompTracker(true) : onUpgrade} />
           <div style={{ height: 8 }} />
@@ -1455,20 +1457,22 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
             color: C.green, fontSize: 14, fontWeight: 700, cursor: "pointer",
             fontFamily: "'DM Sans', sans-serif", marginBottom: 10,
           }}><MessageSquare size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />Email My Results</button>
-          <div onClick={onScrollToPro} style={{
-            background: "linear-gradient(135deg, #15803d, #16a34a)", borderRadius: 12,
-            padding: "16px", cursor: "pointer", textAlign: "center",
-          }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: C.white, marginBottom: 4 }}>
-              {result.verdict === "green" ? "This flip pencils out. Go deeper with Pro." : "Keep running numbers."}
+          {!isPro && (
+            <div onClick={onScrollToPro} style={{
+              background: "linear-gradient(135deg, #15803d, #16a34a)", borderRadius: 12,
+              padding: "16px", cursor: "pointer", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: C.white, marginBottom: 4 }}>
+                {result.verdict === "green" ? "This flip pencils out. Go deeper with Pro." : "Keep running numbers."}
+              </div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginBottom: 10 }}>
+                Rehab Estimator, Comp Tracker, Deal Pipeline — all in Pro.
+              </div>
+              <div style={{ background: C.white, borderRadius: 8, padding: "8px 20px", display: "inline-block", fontSize: 13, fontWeight: 700, color: C.green }}>
+                See what Pro includes →
+              </div>
             </div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginBottom: 10 }}>
-              Rehab Estimator, Comp Tracker, Deal Pipeline — all in Pro.
-            </div>
-            <div style={{ background: C.white, borderRadius: 8, padding: "8px 20px", display: "inline-block", fontSize: 13, fontWeight: 700, color: C.green }}>
-              See what Pro includes →
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>
@@ -3236,7 +3240,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
 
   // ─── PIPELINE DASHBOARD ───
   if (view === "pipeline") {
-    const navTitle = { dashboard: "Dashboard", analyzer: "Deal Analyzer", saved: "Saved Deals", tools: "Pro Tools" }[pipelineNav] || "Deal Pipeline";
+    const navTitle = { dashboard: "Dashboard", analyzer: "Deal Analyzer", saved: "Saved Deals", tools: "Tools" }[pipelineNav] || "Deal Pipeline";
     const bestHold = deals.filter(d => d.deal_type === "hold" && d.verdict === "green").map(d => d.cash_flow ? fmtD(d.cash_flow) + "/mo" : "—")[0] || "—";
 
     return (
