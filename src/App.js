@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Home, Users, DollarSign, Calendar, Wrench, TrendingUp, BarChart3, Building2, ClipboardList, Star, AlertTriangle, Check, X, ChevronRight, ArrowLeft, ArrowRight, Settings, MessageSquare, MoreHorizontal, HelpCircle, Hammer, Camera, Plus, Edit3, Trash2, Upload } from "lucide-react";
+import { Home, Users, DollarSign, Calendar, Wrench, TrendingUp, BarChart3, Building2, ClipboardList, Star, AlertTriangle, Check, X, ChevronRight, ArrowLeft, ArrowRight, Settings, MessageSquare, MoreHorizontal, HelpCircle, Hammer, Camera, Plus, Edit3, Trash2, Upload, FileText, Phone, MapPin, Shield, Send, Droplets, Flame, Zap, GraduationCap } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 // IMPORTANT: Replace anon key below with your real Supabase anon key (starts with eyJ...)
@@ -1976,7 +1976,7 @@ function CashFlowTracker({ session }) {
   );
 }
 
-function TenantTracker({ session }) {
+function TenantTracker({ session, onOpenTenant, onOpenProperty }) {
   const STATUSES = ["current", "notice_given", "vacating", "past_tenant"];
   const [tenants, setTenants] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -2211,11 +2211,11 @@ function TenantTracker({ session }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{t.name}</span>
+                  <span onClick={(e) => { e.stopPropagation(); if (onOpenTenant) onOpenTenant(t.id); }} style={{ fontSize: 15, fontWeight: 700, color: onOpenTenant ? C.green : C.text, cursor: onOpenTenant ? "pointer" : "default" }}>{t.name}</span>
                   {hasOverduePayment && <span style={{ background: C.redLight, color: C.red, fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, letterSpacing: "0.04em" }}>LATE</span>}
                   {leaseEndDays !== null && leaseEndDays > 0 && leaseEndDays <= 90 && <span style={{ background: leaseEndDays <= 30 ? C.redLight : C.yellowLight, color: leaseEndDays <= 30 ? C.red : C.yellowDark, fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, letterSpacing: "0.04em" }}>LEASE {leaseEndDays}d</span>}
                 </div>
-                <div style={{ fontSize: 12, color: C.muted }}>{t.property} — Unit {t.unit}</div>
+                <div onClick={(e) => { e.stopPropagation(); if (onOpenProperty) onOpenProperty(t.property); }} style={{ fontSize: 12, color: onOpenProperty ? C.green : C.muted, cursor: onOpenProperty ? "pointer" : "default" }}>{t.property} — Unit {t.unit}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <button onClick={() => openPayment(t.id)} style={{ ..._editBtn, color: C.green }}>+ Payment</button>
@@ -2251,7 +2251,7 @@ function TenantTracker({ session }) {
   );
 }
 
-function FinancingTracker({ session }) {
+function FinancingTracker({ session, onOpenProperty }) {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2348,7 +2348,7 @@ function FinancingTracker({ session }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{l.property}</span>
+                    <span onClick={(e) => { e.stopPropagation(); if (onOpenProperty) onOpenProperty(l.property); }} style={{ fontSize: 15, fontWeight: 700, color: onOpenProperty ? C.green : C.text, cursor: onOpenProperty ? "pointer" : "default" }}>{l.property}</span>
                     {isBalloon && monthsLeft <= 3 && <span style={{ background: C.redLight, color: C.red, fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>CRITICAL</span>}
                     {isBalloon && monthsLeft > 3 && monthsLeft <= 12 && <span style={{ background: C.yellowLight, color: C.yellowDark, fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>DUE SOON</span>}
                   </div>
@@ -2383,7 +2383,7 @@ function FinancingTracker({ session }) {
   );
 }
 
-function LeaseRenewalTracker({ session }) {
+function LeaseRenewalTracker({ session, onOpenTenant, onOpenProperty }) {
   const [leases, setLeases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2522,8 +2522,8 @@ function LeaseRenewalTracker({ session }) {
             <div key={l.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 18px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{l.tenant}</div>
-                  <div style={{ fontSize: 12, color: C.muted }}>{l.property} — Unit {l.unit}</div>
+                  <div onClick={(e) => { e.stopPropagation(); if (onOpenTenant) onOpenTenant(l.id); }} style={{ fontSize: 14, fontWeight: 700, color: onOpenTenant ? C.green : C.text, cursor: onOpenTenant ? "pointer" : "default" }}>{l.tenant}</div>
+                  <div onClick={(e) => { e.stopPropagation(); if (onOpenProperty) onOpenProperty(l.property); }} style={{ fontSize: 12, color: onOpenProperty ? C.green : C.muted, cursor: onOpenProperty ? "pointer" : "default" }}>{l.property} — Unit {l.unit}</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <button onClick={() => openEdit(l.id)} style={_editBtn}>Edit</button>
@@ -2544,7 +2544,7 @@ function LeaseRenewalTracker({ session }) {
 }
 
 // ─── MAINTENANCE LOG ─────────────────────────────────────────────────────────
-function MaintenanceLog({ session }) {
+function MaintenanceLog({ session, onOpenProperty }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2641,7 +2641,7 @@ function MaintenanceLog({ session }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{m.title}</div>
-                <div style={{ fontSize: 12, color: C.muted }}>{m.property_id}{m.unit_number ? ` — Unit ${m.unit_number}` : ""}</div>
+                <div onClick={(e) => { e.stopPropagation(); if (onOpenProperty) onOpenProperty(m.property_id); }} style={{ fontSize: 12, color: onOpenProperty ? C.green : C.muted, cursor: onOpenProperty ? "pointer" : "default" }}>{m.property_id}{m.unit_number ? ` — Unit ${m.unit_number}` : ""}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {m.status === "open" ? (
@@ -3502,6 +3502,866 @@ function ActiveRehabs({ session }) {
   );
 }
 
+// ─── PROPERTY PROFILE ────────────────────────────────────────────────────────
+
+function PropertyProfile({ property, tenants, payments, leases, loans, maintenance, cashFlowEntries, session, onBack, onOpenTenant, onRefresh }) {
+  const [tab, setTab] = useState("tenants");
+
+  // Documents state
+  const [docs, setDocs] = useState([]);
+  const [docModal, setDocModal] = useState(null);
+  const [docForm, setDocForm] = useState({ name: "", type: "general", file: null });
+  const [emailModal, setEmailModal] = useState(null);
+  const [emailAddr, setEmailAddr] = useState("");
+
+  // Compliance state
+  const COMPLIANCE_ITEMS = [
+    { key: "certificate_of_occupancy", label: "Certificate of Occupancy" },
+    { key: "rental_license", label: "Rental License" },
+    { key: "smoke_detector", label: "Smoke Detector Inspection" },
+    { key: "lead_paint", label: "Lead Paint Disclosure" },
+    { key: "hvac_service", label: "HVAC Service" },
+  ];
+  const [compliance, setCompliance] = useState(() => {
+    const saved = property.compliance || {};
+    return COMPLIANCE_ITEMS.reduce((acc, item) => {
+      acc[item.key] = saved[item.key] || { status: "pending", expiryDate: "", document: null };
+      return acc;
+    }, {});
+  });
+  const [customCompliance, setCustomCompliance] = useState(property.custom_compliance || []);
+  const [addComplianceModal, setAddComplianceModal] = useState(false);
+  const [newComplianceName, setNewComplianceName] = useState("");
+
+  // Vendors state
+  const [vendors, setVendors] = useState(property.vendors || []);
+  const [vendorModal, setVendorModal] = useState(null);
+  const [vendorForm, setVendorForm] = useState({ name: "", phone: "", category: "plumber", notes: "" });
+  const VENDOR_CATEGORIES = ["plumber", "electrician", "landscaper", "handyman", "hvac", "roofer", "painter", "cleaner", "general_contractor", "other"];
+
+  // Utilities state
+  const [utilities, setUtilities] = useState(property.utilities || {
+    electric: { provider: "", account: "", phone: "" },
+    gas: { provider: "", account: "", phone: "" },
+    water: { provider: "", account: "", phone: "" },
+    trash: { provider: "", account: "", phone: "" },
+  });
+
+  // School district state
+  const [schoolDistrict, setSchoolDistrict] = useState(property.school_district || { district: "", elementary: "", middle: "", high: "" });
+
+  // Photo state
+  const [photoUrl, setPhotoUrl] = useState(property.photo_url || "");
+
+  // Load documents
+  useEffect(() => {
+    if (!session || !property.id) return;
+    supabase.from("property_documents").select("*").eq("property_id", property.id).order("created_at", { ascending: false })
+      .then(res => { if (res.data) setDocs(res.data); });
+  }, [session, property.id]);
+
+  const propTenants = tenants.filter(t => t.property_id === property.address || t.property_id === property.id);
+  const propPayments = payments.filter(p => p.property_id === property.address || p.property_id === property.id);
+  const propLeases = leases.filter(l => l.property_id === property.address || l.property_id === property.id);
+  const propLoans = loans.filter(l => l.property_id === property.address || l.property_id === property.id);
+  const propMaintenance = maintenance.filter(m => m.property_id === property.address || m.property_id === property.id);
+  const propCashFlow = (cashFlowEntries || []).filter(e => e.property_id === property.address || e.property_id === property.id);
+  const currentTenant = propTenants.find(t => t.status === "current");
+  const currentLease = propLeases.sort((a, b) => new Date(b.lease_end || 0) - new Date(a.lease_end || 0))[0];
+
+  const savePropertyField = async (fields) => {
+    await supabase.from("properties").update(fields).eq("id", property.id);
+  };
+
+  const saveCompliance = async (updated) => {
+    setCompliance(updated);
+    savePropertyField({ compliance: updated, custom_compliance: customCompliance });
+  };
+
+  const saveVendors = async (updated) => {
+    setVendors(updated);
+    savePropertyField({ vendors: updated });
+  };
+
+  const saveUtilities = async (updated) => {
+    setUtilities(updated);
+    savePropertyField({ utilities: updated });
+  };
+
+  const saveSchoolDistrict = async (updated) => {
+    setSchoolDistrict(updated);
+    savePropertyField({ school_district: updated });
+  };
+
+  const addDocument = async () => {
+    if (!docForm.name) return;
+    const res = await supabase.from("property_documents").insert({
+      user_id: session.user.id, property_id: property.id,
+      name: docForm.name, doc_type: docForm.type, file_name: docForm.file?.name || "",
+    }).select().single();
+    if (res.data) setDocs(prev => [res.data, ...prev]);
+    setDocModal(null);
+    setDocForm({ name: "", type: "general", file: null });
+  };
+
+  const deleteDocument = async (id) => {
+    await supabase.from("property_documents").delete().eq("id", id);
+    setDocs(prev => prev.filter(d => d.id !== id));
+  };
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setPhotoUrl(url);
+    }
+  };
+
+  const addVendor = () => {
+    if (!vendorForm.name) return;
+    const updated = [...vendors, { ...vendorForm, id: Date.now() }];
+    saveVendors(updated);
+    setVendorModal(null);
+    setVendorForm({ name: "", phone: "", category: "plumber", notes: "" });
+  };
+
+  const deleteVendor = (id) => {
+    saveVendors(vendors.filter(v => v.id !== id));
+  };
+
+  const complianceStatusBadge = (status) => {
+    const cfg = { valid: { bg: C.greenLight, color: C.greenDark, label: "VALID" }, expired: { bg: C.redLight, color: C.red, label: "EXPIRED" }, pending: { bg: C.bg, color: C.muted, label: "PENDING" } }[status] || { bg: C.bg, color: C.muted, label: "PENDING" };
+    return <span style={{ background: cfg.bg, color: cfg.color, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, letterSpacing: "0.04em" }}>{cfg.label}</span>;
+  };
+
+  const TABS = [
+    { id: "tenants", label: "Tenants" },
+    { id: "maintenance", label: "Maintenance" },
+    { id: "cashflow", label: "Cash Flow" },
+    { id: "loans", label: "Loans" },
+    { id: "documents", label: "Documents" },
+    { id: "compliance", label: "Compliance" },
+    { id: "vendors", label: "Vendors" },
+    { id: "utilities", label: "Utilities" },
+    { id: "school", label: "School District" },
+  ];
+
+  return (
+    <div>
+      {/* Back button */}
+      <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", marginBottom: 20, color: C.muted, fontSize: 13, fontWeight: 600 }}>
+        <ArrowLeft size={16} /> Back to Properties
+      </div>
+
+      {/* Header */}
+      <div style={{ display: "flex", gap: 20, marginBottom: 28, flexWrap: "wrap" }}>
+        {/* Photo slot */}
+        <label style={{ width: 140, height: 100, borderRadius: 12, border: `2px dashed ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", overflow: "hidden", flexShrink: 0, background: photoUrl ? "none" : C.bg }}>
+          {photoUrl ? (
+            <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <div style={{ textAlign: "center" }}>
+              <Camera size={24} color={C.mutedLight} />
+              <div style={{ fontSize: 10, color: C.mutedLight, marginTop: 4 }}>Add Photo</div>
+            </div>
+          )}
+          <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: "none" }} />
+        </label>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: C.text }}>{property.address}</div>
+            <span style={{
+              background: property.status === "late" ? C.redLight : C.greenLight,
+              color: property.status === "late" ? C.red : C.greenDark,
+              fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 6,
+              textTransform: "uppercase", letterSpacing: "0.04em",
+            }}>{property.status === "late" ? "LATE" : "CURRENT"}</span>
+          </div>
+          <div style={{ fontSize: 13, color: C.muted }}>{property.units || 1} unit{(property.units || 1) > 1 ? "s" : ""}</div>
+        </div>
+      </div>
+
+      {/* Key stat cards */}
+      <div className="db-stat-row" style={{ display: "flex", gap: 12, marginBottom: 28, flexWrap: "wrap" }}>
+        <DashStatCard label="Purchase Price" value={fmtD(property.purchase_price || 0)} />
+        <DashStatCard label="Loan Balance" value={fmtD(property.loan_balance || 0)} />
+        <DashStatCard label="Monthly Rent" value={fmtD(property.monthly_rent || 0)} />
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px", flex: 1, minWidth: 120 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Current Tenant</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{currentTenant ? currentTenant.name : "Vacant"}</div>
+        </div>
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px", flex: 1, minWidth: 120 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Lease End</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{currentLease?.lease_end || currentTenant?.lease_end || "—"}</div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 24, overflowX: "auto", borderBottom: `2px solid ${C.border}`, paddingBottom: 0 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding: "10px 16px", border: "none", background: "none", cursor: "pointer",
+            fontSize: 13, fontWeight: tab === t.id ? 700 : 500, color: tab === t.id ? C.green : C.muted,
+            borderBottom: tab === t.id ? `2px solid ${C.green}` : "2px solid transparent",
+            marginBottom: -2, fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap",
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* ── Tenants Tab ── */}
+      {tab === "tenants" && (
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Tenants</div>
+          {propTenants.length === 0 ? (
+            <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+              <Users size={32} color={C.mutedLight} style={{ marginBottom: 8, opacity: 0.4 }} />
+              <div style={{ fontSize: 14, color: C.muted }}>No tenants assigned to this property.</div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {propTenants.map(t => {
+                const tPayments = propPayments.filter(p => p.tenant_id === t.id);
+                const isLate = tPayments.some(p => !p.paid_date && new Date(p.due_date) < new Date());
+                return (
+                  <div key={t.id} onClick={() => onOpenTenant(t.id)} style={{ background: C.white, border: `1px solid ${isLate ? C.red + "44" : C.border}`, borderRadius: 12, padding: "16px 18px", cursor: "pointer" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: C.green }}>{t.name}</span>
+                          {isLate && <span style={{ background: C.redLight, color: C.red, fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>LATE</span>}
+                        </div>
+                        <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Unit {t.unit_number || "—"} — {fmtD(t.monthly_rent || 0)}/mo — Lease ends {t.lease_end || "N/A"}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{
+                          background: t.status === "current" ? C.greenLight : t.status === "past_tenant" ? C.bg : C.yellowLight,
+                          color: t.status === "current" ? C.greenDark : t.status === "past_tenant" ? C.mutedLight : C.yellowDark,
+                          fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase",
+                        }}>{(t.status || "current").replace(/_/g, " ")}</span>
+                        <ChevronRight size={16} color={C.mutedLight} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Maintenance Tab ── */}
+      {tab === "maintenance" && (
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Maintenance Log</div>
+          {propMaintenance.length === 0 ? (
+            <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+              <Wrench size={32} color={C.mutedLight} style={{ marginBottom: 8, opacity: 0.4 }} />
+              <div style={{ fontSize: 14, color: C.muted }}>No maintenance requests for this property.</div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {propMaintenance.map(m => (
+                <div key={m.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{m.title}</div>
+                    <span style={{
+                      background: m.status === "closed" ? C.greenLight : m.priority === "urgent" ? C.redLight : C.yellowLight,
+                      color: m.status === "closed" ? C.greenDark : m.priority === "urgent" ? C.red : C.yellowDark,
+                      fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase",
+                    }}>{m.status === "closed" ? "CLOSED" : m.priority === "urgent" ? "URGENT" : "OPEN"}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>{m.description}</div>
+                  <div style={{ display: "flex", gap: 16, fontSize: 12 }}>
+                    {m.vendor && <span style={{ color: C.text, fontWeight: 600 }}>Vendor: {m.vendor}</span>}
+                    {m.cost > 0 && <span style={{ color: C.text, fontWeight: 600 }}>Cost: {fmtD(m.cost)}</span>}
+                    {m.unit_number && <span style={{ color: C.muted }}>Unit {m.unit_number}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Cash Flow Tab ── */}
+      {tab === "cashflow" && (
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Cash Flow — Actual vs Projected</div>
+          {propCashFlow.length === 0 ? (
+            <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+              <BarChart3 size={32} color={C.mutedLight} style={{ marginBottom: 8, opacity: 0.4 }} />
+              <div style={{ fontSize: 14, color: C.muted }}>No cash flow entries for this property yet. Record payments and set projections in Cash Flow Tracker.</div>
+            </div>
+          ) : (
+            <>
+              <div style={{ background: "#111827", borderRadius: 14, padding: "24px 20px", marginBottom: 20 }}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={propCashFlow.sort((a, b) => (a.month || "").localeCompare(b.month || ""))} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => "$" + (v >= 1000 ? (v / 1000).toFixed(0) + "k" : v)} />
+                    <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: 8, fontSize: 13 }} />
+                    <Area type="monotone" dataKey="projected_cash_flow" stroke="#374151" strokeWidth={2} fill="none" dot={false} name="Projected" />
+                    <Area type="monotone" dataKey="actual_rent" stroke="#22C55E" strokeWidth={2.5} fill="none" dot={{ fill: "#22C55E", r: 3 }} name="Actual Rent" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+                  {["Month", "Projected", "Actual Rent", "Actual Expenses"].map(h => (
+                    <span key={h} style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</span>
+                  ))}
+                </div>
+                {propCashFlow.sort((a, b) => (b.month || "").localeCompare(a.month || "")).map((e, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}` }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{e.month}</span>
+                    <span style={{ fontSize: 13, color: C.muted }}>{fmtD(e.projected_cash_flow || 0)}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.green }}>{fmtD(e.actual_rent || 0)}</span>
+                    <span style={{ fontSize: 13, color: C.red }}>{fmtD(e.actual_expenses || 0)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Loans Tab ── */}
+      {tab === "loans" && (
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Financing</div>
+          {propLoans.length === 0 ? (
+            <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+              <DollarSign size={32} color={C.mutedLight} style={{ marginBottom: 8, opacity: 0.4 }} />
+              <div style={{ fontSize: 14, color: C.muted }}>No loans tied to this property.</div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {propLoans.map(l => {
+                const balloonDays = l.maturity_date && (l.loan_type || "").includes("Balloon") ? Math.round((new Date(l.maturity_date) - new Date()) / (24 * 60 * 60 * 1000)) : null;
+                return (
+                  <div key={l.id} style={{ background: C.white, border: `1px solid ${balloonDays && balloonDays <= 365 ? C.yellow + "66" : C.border}`, borderRadius: 12, padding: "18px 20px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{l.lender}</div>
+                      {balloonDays && balloonDays > 0 && balloonDays <= 365 && (
+                        <span style={{ background: balloonDays <= 90 ? C.redLight : C.yellowLight, color: balloonDays <= 90 ? C.red : C.yellowDark, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5 }}>
+                          <AlertTriangle size={10} style={{ verticalAlign: "middle", marginRight: 3 }} />BALLOON {balloonDays}d
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Balance</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{fmtD(l.current_balance || 0)}</div></div>
+                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Rate</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{l.interest_rate || 0}%</div></div>
+                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Payment</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{fmtD(l.monthly_payment || 0)}/mo</div></div>
+                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Type</div><div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{l.loan_type || "Fixed"}</div></div>
+                    </div>
+                    {l.maturity_date && <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>Maturity: {l.maturity_date}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Documents Tab ── */}
+      {tab === "documents" && (
+        <div>
+          {docModal && (
+            <div style={_modalOverlay}><div style={_modalBox}>
+              {_modalHeader("Add Document", () => setDocModal(null))}
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Document Name</label><input value={docForm.name} onChange={e => setDocForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Lease Agreement" style={_modalInput} /></div>
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Type</label>
+                <select value={docForm.type} onChange={e => setDocForm(p => ({ ...p, type: e.target.value }))} style={{ ..._modalInput, cursor: "pointer" }}>
+                  <option value="general">General</option><option value="lease">Lease</option><option value="inspection">Inspection</option><option value="insurance">Insurance</option><option value="tax">Tax</option><option value="invoice">Invoice</option>
+                </select>
+              </div>
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>File</label><input type="file" onChange={e => setDocForm(p => ({ ...p, file: e.target.files?.[0] || null }))} style={{ fontSize: 13, fontFamily: "'DM Sans', sans-serif" }} /></div>
+              <button onClick={addDocument} style={_modalSubmit()}>{docForm.file ? "Upload Document" : "Add Document"}</button>
+            </div></div>
+          )}
+          {emailModal && (
+            <div style={_modalOverlay}><div style={_modalBox}>
+              {_modalHeader("Email Document", () => setEmailModal(null))}
+              <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>Send "{emailModal.name}" to:</div>
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Email Address</label><input type="email" value={emailAddr} onChange={e => setEmailAddr(e.target.value)} placeholder="recipient@email.com" style={_modalInput} /></div>
+              <button onClick={() => { setEmailModal(null); setEmailAddr(""); }} style={_modalSubmit()}>Send Email</button>
+            </div></div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Documents</div>
+            <button onClick={() => setDocModal(true)} style={_addBtn}>+ Add Document</button>
+          </div>
+          {docs.length === 0 ? (
+            <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+              <FileText size={32} color={C.mutedLight} style={{ marginBottom: 8, opacity: 0.4 }} />
+              <div style={{ fontSize: 14, color: C.muted }}>No documents uploaded yet.</div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {docs.map(d => (
+                <div key={d.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <FileText size={18} color={C.green} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{d.name}</div>
+                      <div style={{ fontSize: 11, color: C.muted }}>{d.doc_type} {d.file_name ? `— ${d.file_name}` : ""}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => { setEmailAddr(""); setEmailModal(d); }} style={{ ...(_editBtn), color: C.green }} title="Email"><Send size={14} /></button>
+                    <button onClick={() => deleteDocument(d.id)} style={{ ...(_editBtn), color: C.red }} title="Delete"><Trash2 size={14} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Compliance Tab ── */}
+      {tab === "compliance" && (
+        <div>
+          {addComplianceModal && (
+            <div style={_modalOverlay}><div style={_modalBox}>
+              {_modalHeader("Add Compliance Item", () => setAddComplianceModal(false))}
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Item Name</label><input value={newComplianceName} onChange={e => setNewComplianceName(e.target.value)} placeholder="e.g. Fire Escape Inspection" style={_modalInput} /></div>
+              <button onClick={() => { if (newComplianceName) { setCustomCompliance(prev => [...prev, { key: "custom_" + Date.now(), label: newComplianceName, status: "pending", expiryDate: "", document: null }]); setNewComplianceName(""); setAddComplianceModal(false); } }} style={_modalSubmit()}>Add Item</button>
+            </div></div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Compliance</div>
+            <button onClick={() => setAddComplianceModal(true)} style={_addBtn}>+ Add Item</button>
+          </div>
+          <div style={{ display: "grid", gap: 10 }}>
+            {COMPLIANCE_ITEMS.map(item => {
+              const c = compliance[item.key] || { status: "pending", expiryDate: "" };
+              return (
+                <div key={item.key} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Shield size={16} color={C.green} />
+                      <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{item.label}</span>
+                    </div>
+                    {complianceStatusBadge(c.status)}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 12, alignItems: "end" }}>
+                    <div>
+                      <label style={_modalLabel}>Status</label>
+                      <select value={c.status} onChange={e => { const updated = { ...compliance, [item.key]: { ...c, status: e.target.value } }; saveCompliance(updated); }} style={{ ..._modalInput, cursor: "pointer", fontSize: 12, padding: "8px 10px" }}>
+                        <option value="pending">Pending</option><option value="valid">Valid</option><option value="expired">Expired</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={_modalLabel}>Expiry Date</label>
+                      <input type="date" value={c.expiryDate} onChange={e => { const updated = { ...compliance, [item.key]: { ...c, expiryDate: e.target.value } }; saveCompliance(updated); }} style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} />
+                    </div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", padding: "8px 12px", background: C.bg, borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, fontWeight: 600, color: C.muted }}>
+                      <Upload size={14} /> Upload
+                      <input type="file" style={{ display: "none" }} onChange={() => {}} />
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+            {customCompliance.map((item, idx) => (
+              <div key={item.key} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Shield size={16} color={C.green} />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{item.label}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {complianceStatusBadge(item.status)}
+                    <button onClick={() => setCustomCompliance(prev => prev.filter((_, i) => i !== idx))} style={{ ...(_editBtn), color: C.red }}><Trash2 size={12} /></button>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div>
+                    <label style={_modalLabel}>Status</label>
+                    <select value={item.status} onChange={e => { const updated = [...customCompliance]; updated[idx] = { ...item, status: e.target.value }; setCustomCompliance(updated); }} style={{ ..._modalInput, cursor: "pointer", fontSize: 12, padding: "8px 10px" }}>
+                      <option value="pending">Pending</option><option value="valid">Valid</option><option value="expired">Expired</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={_modalLabel}>Expiry Date</label>
+                    <input type="date" value={item.expiryDate || ""} onChange={e => { const updated = [...customCompliance]; updated[idx] = { ...item, expiryDate: e.target.value }; setCustomCompliance(updated); }} style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Vendors Tab ── */}
+      {tab === "vendors" && (
+        <div>
+          {vendorModal !== null && (
+            <div style={_modalOverlay}><div style={_modalBox}>
+              {_modalHeader("Add Vendor", () => setVendorModal(null))}
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Vendor Name</label><input value={vendorForm.name} onChange={e => setVendorForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Joe's Plumbing" style={_modalInput} /></div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div><label style={_modalLabel}>Phone</label><input value={vendorForm.phone} onChange={e => setVendorForm(p => ({ ...p, phone: e.target.value }))} placeholder="555-0101" style={_modalInput} /></div>
+                <div><label style={_modalLabel}>Category</label>
+                  <select value={vendorForm.category} onChange={e => setVendorForm(p => ({ ...p, category: e.target.value }))} style={{ ..._modalInput, cursor: "pointer" }}>
+                    {VENDOR_CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Notes</label><input value={vendorForm.notes} onChange={e => setVendorForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" style={_modalInput} /></div>
+              <button onClick={addVendor} style={_modalSubmit()}>Add Vendor</button>
+            </div></div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Vendors</div>
+            <button onClick={() => setVendorModal(true)} style={_addBtn}>+ Add Vendor</button>
+          </div>
+          {vendors.length === 0 ? (
+            <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+              <Wrench size={32} color={C.mutedLight} style={{ marginBottom: 8, opacity: 0.4 }} />
+              <div style={{ fontSize: 14, color: C.muted }}>No vendors added yet.</div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {vendors.map(v => (
+                <div key={v.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{v.name}</div>
+                      <span style={{ background: C.greenLight, color: C.greenDark, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 4, textTransform: "uppercase" }}>{v.category.replace(/_/g, " ")}</span>
+                    </div>
+                    <button onClick={() => deleteVendor(v.id)} style={{ ...(_editBtn), color: C.red }}><Trash2 size={14} /></button>
+                  </div>
+                  <div style={{ display: "flex", gap: 16, fontSize: 12, color: C.muted }}>
+                    {v.phone && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Phone size={12} /> {v.phone}</span>}
+                    {v.notes && <span>{v.notes}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Utilities Tab ── */}
+      {tab === "utilities" && (
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 16 }}>Utilities</div>
+          <div style={{ display: "grid", gap: 14 }}>
+            {[
+              { key: "electric", label: "Electric", Icon: Zap, color: "#f59e0b" },
+              { key: "gas", label: "Gas", Icon: Flame, color: "#ef4444" },
+              { key: "water", label: "Water", Icon: Droplets, color: "#3b82f6" },
+              { key: "trash", label: "Trash", Icon: Trash2, color: "#6b7280" },
+            ].map(u => {
+              const data = utilities[u.key] || { provider: "", account: "", phone: "" };
+              return (
+                <div key={u.key} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 20px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                    <u.Icon size={18} color={u.color} />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{u.label}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label style={_modalLabel}>Provider</label>
+                      <input value={data.provider} onChange={e => { const updated = { ...utilities, [u.key]: { ...data, provider: e.target.value } }; saveUtilities(updated); }} placeholder="Provider name" style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} />
+                    </div>
+                    <div>
+                      <label style={_modalLabel}>Account #</label>
+                      <input value={data.account} onChange={e => { const updated = { ...utilities, [u.key]: { ...data, account: e.target.value } }; saveUtilities(updated); }} placeholder="Account number" style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} />
+                    </div>
+                    <div>
+                      <label style={_modalLabel}>Phone</label>
+                      <input value={data.phone} onChange={e => { const updated = { ...utilities, [u.key]: { ...data, phone: e.target.value } }; saveUtilities(updated); }} placeholder="555-0101" style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── School District Tab ── */}
+      {tab === "school" && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <GraduationCap size={20} color={C.green} />
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>School District</div>
+          </div>
+          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 22px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={_modalLabel}>District Name</label>
+                <input value={schoolDistrict.district} onChange={e => saveSchoolDistrict({ ...schoolDistrict, district: e.target.value })} placeholder="e.g. Springfield Public Schools" style={_modalInput} />
+              </div>
+              <div>
+                <label style={_modalLabel}>Elementary School</label>
+                <input value={schoolDistrict.elementary} onChange={e => saveSchoolDistrict({ ...schoolDistrict, elementary: e.target.value })} placeholder="School name" style={_modalInput} />
+              </div>
+              <div>
+                <label style={_modalLabel}>Middle School</label>
+                <input value={schoolDistrict.middle} onChange={e => saveSchoolDistrict({ ...schoolDistrict, middle: e.target.value })} placeholder="School name" style={_modalInput} />
+              </div>
+              <div>
+                <label style={_modalLabel}>High School</label>
+                <input value={schoolDistrict.high} onChange={e => saveSchoolDistrict({ ...schoolDistrict, high: e.target.value })} placeholder="School name" style={_modalInput} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TENANT PROFILE ─────────────────────────────────────────────────────────
+
+function TenantProfile({ tenantId, tenants, payments, session, onBack, onOpenProperty, properties }) {
+  const [tab, setTab] = useState("info");
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [notes, setNotes] = useState("");
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [docs, setDocs] = useState([]);
+  const [docModal, setDocModal] = useState(null);
+  const [docForm, setDocForm] = useState({ name: "", type: "lease", file: null });
+
+  const tenant = tenants.find(t => t.id === tenantId);
+
+  useEffect(() => {
+    if (!session || !tenantId) return;
+    supabase.from("tenant_documents").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false })
+      .then(res => { if (res.data) setDocs(res.data); });
+    supabase.from("tenants").select("notes, photo_url, email, deposit").eq("id", tenantId).maybeSingle()
+      .then(res => { if (res.data) { setNotes(res.data.notes || ""); setPhotoUrl(res.data.photo_url || ""); } });
+  }, [session, tenantId]);
+
+  if (!tenant) return <div style={{ textAlign: "center", padding: 60, color: C.muted }}>Tenant not found.</div>;
+
+  const tenantPayments = payments.filter(p => p.tenant_id === tenantId).sort((a, b) => new Date(b.due_date || 0) - new Date(a.due_date || 0));
+  const property = properties.find(p => p.address === tenant.property_id || p.id === tenant.property_id);
+  const hasOverdue = tenantPayments.some(p => !p.paid_date && new Date(p.due_date) < new Date());
+
+  const getPaymentStatus = (p) => {
+    if (!p.paid_date) return { label: "UNPAID", bg: C.redLight, color: C.red };
+    const due = new Date(p.due_date);
+    const paid = new Date(p.paid_date);
+    if (paid <= due) return { label: "ON TIME", bg: C.greenLight, color: C.greenDark };
+    const daysLate = Math.round((paid - due) / (24 * 60 * 60 * 1000));
+    return { label: `${daysLate}d LATE`, bg: C.yellowLight, color: C.yellowDark };
+  };
+
+  const statusBadge = (status) => {
+    const cfg = { current: { bg: C.greenLight, color: C.greenDark, label: "CURRENT" }, notice_given: { bg: C.yellowLight, color: C.yellowDark, label: "NOTICE GIVEN" }, vacating: { bg: "#FEF3C7", color: "#92400E", label: "VACATING" }, past_tenant: { bg: C.bg, color: C.mutedLight, label: "PAST TENANT" }, late: { bg: C.redLight, color: C.red, label: "LATE" } }[status] || { bg: C.bg, color: C.muted, label: (status || "").toUpperCase() };
+    return <span style={{ background: cfg.bg, color: cfg.color, fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 6, letterSpacing: "0.04em" }}>{cfg.label}</span>;
+  };
+
+  const handlePhotoUpload = (e) => { const file = e.target.files?.[0]; if (file) setPhotoUrl(URL.createObjectURL(file)); };
+
+  const saveNotes = async () => {
+    setNotesSaving(true);
+    await supabase.from("tenants").update({ notes }).eq("id", tenantId);
+    setNotesSaving(false);
+  };
+
+  const addDocument = async () => {
+    if (!docForm.name) return;
+    const res = await supabase.from("tenant_documents").insert({
+      user_id: session.user.id, tenant_id: tenantId,
+      name: docForm.name, doc_type: docForm.type, file_name: docForm.file?.name || "",
+    }).select().single();
+    if (res.data) setDocs(prev => [res.data, ...prev]);
+    setDocModal(null);
+    setDocForm({ name: "", type: "lease", file: null });
+  };
+
+  const deleteDocument = async (id) => {
+    await supabase.from("tenant_documents").delete().eq("id", id);
+    setDocs(prev => prev.filter(d => d.id !== id));
+  };
+
+  const TABS = [
+    { id: "info", label: "Info" },
+    { id: "payments", label: "Payment History" },
+    { id: "notes", label: "Notes" },
+    { id: "documents", label: "Documents" },
+  ];
+
+  return (
+    <div>
+      {/* Back button */}
+      <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", marginBottom: 20, color: C.muted, fontSize: 13, fontWeight: 600 }}>
+        <ArrowLeft size={16} /> Back
+      </div>
+
+      {/* Header */}
+      <div style={{ display: "flex", gap: 20, marginBottom: 28, flexWrap: "wrap" }}>
+        <label style={{ width: 90, height: 90, borderRadius: "50%", border: `2px dashed ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", overflow: "hidden", flexShrink: 0, background: photoUrl ? "none" : C.bg }}>
+          {photoUrl ? (
+            <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <Camera size={24} color={C.mutedLight} />
+          )}
+          <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: "none" }} />
+        </label>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: C.text }}>{tenant.name}</div>
+            {statusBadge(hasOverdue ? "late" : tenant.status)}
+          </div>
+          <div style={{ fontSize: 13, color: C.muted, display: "flex", gap: 16, flexWrap: "wrap" }}>
+            {tenant.property_id && (
+              <span onClick={() => { if (property) onOpenProperty(property.id); }} style={{ display: "flex", alignItems: "center", gap: 4, cursor: property ? "pointer" : "default", color: property ? C.green : C.muted }}>
+                <MapPin size={14} /> {tenant.property_id}{tenant.unit_number ? `, Unit ${tenant.unit_number}` : ""}
+              </span>
+            )}
+            {tenant.phone && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Phone size={14} /> {tenant.phone}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Key stat cards */}
+      <div className="db-stat-row" style={{ display: "flex", gap: 12, marginBottom: 28, flexWrap: "wrap" }}>
+        <DashStatCard label="Monthly Rent" value={fmtD(tenant.monthly_rent || 0)} />
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px", flex: 1, minWidth: 110 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Lease Start</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{tenant.lease_start || "—"}</div>
+        </div>
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px", flex: 1, minWidth: 110 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Lease End</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{tenant.lease_end || "—"}</div>
+        </div>
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px", flex: 1, minWidth: 110 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Deposit</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{fmtD(tenant.deposit || tenant.monthly_rent || 0)}</div>
+        </div>
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px", flex: 1, minWidth: 110 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Status</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, textTransform: "capitalize" }}>{(tenant.status || "current").replace(/_/g, " ")}</div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 24, overflowX: "auto", borderBottom: `2px solid ${C.border}`, paddingBottom: 0 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding: "10px 16px", border: "none", background: "none", cursor: "pointer",
+            fontSize: 13, fontWeight: tab === t.id ? 700 : 500, color: tab === t.id ? C.green : C.muted,
+            borderBottom: tab === t.id ? `2px solid ${C.green}` : "2px solid transparent",
+            marginBottom: -2, fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap",
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* ── Info Tab ── */}
+      {tab === "info" && (
+        <div>
+          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 22px" }}>
+            <SectionTitle>Contact Information</SectionTitle>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div><div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>Full Name</div><div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{tenant.name}</div></div>
+              <div><div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>Phone</div><div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{tenant.phone || "—"}</div></div>
+              <div><div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>Property</div><div onClick={() => { if (property) onOpenProperty(property.id); }} style={{ fontSize: 15, fontWeight: 600, color: property ? C.green : C.text, cursor: property ? "pointer" : "default" }}>{tenant.property_id}</div></div>
+              <div><div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>Unit</div><div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{tenant.unit_number || "—"}</div></div>
+              <div><div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>Monthly Rent</div><div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{fmtD(tenant.monthly_rent || 0)}</div></div>
+              <div><div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", marginBottom: 4 }}>Lease End</div><div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{tenant.lease_end || "—"}</div></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Payment History Tab ── */}
+      {tab === "payments" && (
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Payment History</div>
+          {tenantPayments.length === 0 ? (
+            <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+              <DollarSign size={32} color={C.mutedLight} style={{ marginBottom: 8, opacity: 0.4 }} />
+              <div style={{ fontSize: 14, color: C.muted }}>No payment records yet.</div>
+            </div>
+          ) : (
+            <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 0.8fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+                {["Month", "Amount", "Due Date", "Paid Date", "Status"].map(h => (
+                  <span key={h} style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</span>
+                ))}
+              </div>
+              {tenantPayments.map((p, i) => {
+                const ps = getPaymentStatus(p);
+                return (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 0.8fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, alignItems: "center" }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{p.month || "—"}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{fmtD(p.amount || 0)}</span>
+                    <span style={{ fontSize: 13, color: C.muted }}>{p.due_date}</span>
+                    <span style={{ fontSize: 13, color: C.muted }}>{p.paid_date || "—"}</span>
+                    <span style={{ background: ps.bg, color: ps.color, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, textAlign: "center" }}>{ps.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Notes Tab ── */}
+      {tab === "notes" && (
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Notes</div>
+          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 22px" }}>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes about this tenant..." rows={8} style={{ ..._modalInput, resize: "vertical", minHeight: 120 }} />
+            <button onClick={saveNotes} disabled={notesSaving} style={{ ..._addBtn, marginTop: 12, opacity: notesSaving ? 0.7 : 1 }}>{notesSaving ? "Saving..." : "Save Notes"}</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Documents Tab ── */}
+      {tab === "documents" && (
+        <div>
+          {docModal && (
+            <div style={_modalOverlay}><div style={_modalBox}>
+              {_modalHeader("Add Document", () => setDocModal(null))}
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Document Name</label><input value={docForm.name} onChange={e => setDocForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Lease Agreement" style={_modalInput} /></div>
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Type</label>
+                <select value={docForm.type} onChange={e => setDocForm(p => ({ ...p, type: e.target.value }))} style={{ ..._modalInput, cursor: "pointer" }}>
+                  <option value="lease">Lease</option><option value="correspondence">Correspondence</option><option value="id">ID / Verification</option><option value="other">Other</option>
+                </select>
+              </div>
+              <div style={{ marginBottom: 12 }}><label style={_modalLabel}>File</label><input type="file" onChange={e => setDocForm(p => ({ ...p, file: e.target.files?.[0] || null }))} style={{ fontSize: 13, fontFamily: "'DM Sans', sans-serif" }} /></div>
+              <button onClick={addDocument} style={_modalSubmit()}>Add Document</button>
+            </div></div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Documents</div>
+            <button onClick={() => setDocModal(true)} style={_addBtn}>+ Add Document</button>
+          </div>
+          {docs.length === 0 ? (
+            <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+              <FileText size={32} color={C.mutedLight} style={{ marginBottom: 8, opacity: 0.4 }} />
+              <div style={{ fontSize: 14, color: C.muted }}>No documents uploaded yet.</div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {docs.map(d => (
+                <div key={d.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <FileText size={18} color={C.green} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{d.name}</div>
+                      <div style={{ fontSize: 11, color: C.muted }}>{d.doc_type}{d.file_name ? ` — ${d.file_name}` : ""}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => deleteDocument(d.id)} style={{ ...(_editBtn), color: C.red }}><Trash2 size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
 
 
@@ -3661,6 +4521,12 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
   const [briefingLeases, setBriefingLeases] = useState([]);
   const [briefingLoans, setBriefingLoans] = useState([]);
   const [briefingMaintenance, setBriefingMaintenance] = useState([]);
+  const [briefingCashFlow, setBriefingCashFlow] = useState([]);
+  const [selectedPropertyId, setSelectedPropertyId] = useState(null);
+  const [selectedTenantId, setSelectedTenantId] = useState(null);
+
+  const openPropertyProfile = (id) => { setSelectedPropertyId(id); setSelectedTenantId(null); setPropertiesNav("propertyDetail"); setDashPanel(null); };
+  const openTenantProfile = (id) => { setSelectedTenantId(id); setSelectedPropertyId(null); setPropertiesNav("tenantDetail"); setDashPanel(null); };
 
   const firstName = session?.user?.email ? session.user.email.split("@")[0].replace(/[^a-zA-Z]/g, " ").split(" ")[0].charAt(0).toUpperCase() + session.user.email.split("@")[0].replace(/[^a-zA-Z]/g, " ").split(" ")[0].slice(1) : "there";
   const userInitials = session?.user?.email ? session.user.email.split("@")[0].replace(/[^a-zA-Z]/g, " ").trim().split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2) || "U" : "U";
@@ -3677,6 +4543,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
     supabase.from("leases").select("*").then(res => { dbLog("dashboard.leases", res); setBriefingLeases(res.data || []); });
     supabase.from("loans").select("*").then(res => { dbLog("dashboard.loans", res); setBriefingLoans(res.data || []); });
     supabase.from("maintenance_items").select("*").then(res => { dbLog("dashboard.maintenance", res); setBriefingMaintenance(res.data || []); });
+    supabase.from("cash_flow_entries").select("*").then(res => { dbLog("dashboard.cashflow", res); setBriefingCashFlow(res.data || []); });
   }, [session]);
 
   // Load on mount and refresh whenever user navigates to a dashboard view
@@ -4313,6 +5180,10 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
               <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Settings</span>
             ) : dashPanel === "feedback" ? (
               <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Beta Feedback</span>
+            ) : propertiesNav === "propertyDetail" ? (
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{(properties.find(p => p.id === selectedPropertyId) || {}).address || "Property"}</span>
+            ) : propertiesNav === "tenantDetail" ? (
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{(briefingTenants.find(t => t.id === selectedTenantId) || {}).name || "Tenant"}</span>
             ) : propertiesNav !== "dashboard" ? (
               <span style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{(PROPERTIES_NAV.find(n => n.id === propertiesNav) || {}).label || "Portfolio Overview"}</span>
             ) : null}
@@ -4418,8 +5289,8 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                     <div style={{ fontSize: 13, color: C.muted, fontStyle: "italic" }}>All payments current.</div>
                   ) : lateTenants.map((t, i) => (
                     <div key={i} style={{ padding: "8px 0", borderBottom: i < lateTenants.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{t.name}</div>
-                      <div style={{ fontSize: 12, color: C.muted }}>{t.property_id}</div>
+                      <div onClick={() => openTenantProfile(t.id)} style={{ fontSize: 13, fontWeight: 600, color: C.green, cursor: "pointer" }}>{t.name}</div>
+                      <div onClick={() => { const prop = properties.find(p => p.address === t.property_id); if (prop) openPropertyProfile(prop.id); }} style={{ fontSize: 12, color: C.muted, cursor: "pointer" }}>{t.property_id}</div>
                     </div>
                   ))}
                 </div>
@@ -4430,8 +5301,8 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                     <div style={{ fontSize: 13, color: C.muted, fontStyle: "italic" }}>No leases expiring soon.</div>
                   ) : expiring60.map((l, i) => (
                     <div key={i} style={{ padding: "8px 0", borderBottom: i < expiring60.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{l.tenant_name}</div>
-                      <div style={{ fontSize: 12, color: C.muted }}>{l.property_id} — {l.daysLeft}d remaining</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.green, cursor: "pointer" }} onClick={() => { const tenant = briefingTenants.find(t => t.name === l.tenant_name); if (tenant) openTenantProfile(tenant.id); }}>{l.tenant_name}</div>
+                      <div onClick={() => { const prop = properties.find(p => p.address === l.property_id); if (prop) openPropertyProfile(prop.id); }} style={{ fontSize: 12, color: C.muted, cursor: "pointer" }}>{l.property_id} — {l.daysLeft}d remaining</div>
                     </div>
                   ))}
                 </div>
@@ -4446,7 +5317,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                         <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{l.lender}</div>
                         <span style={{ background: l.daysLeft <= 90 ? C.redLight : C.yellowLight, color: l.daysLeft <= 90 ? C.red : C.yellowDark, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>{l.daysLeft}d</span>
                       </div>
-                      <div style={{ fontSize: 12, color: C.muted }}>{l.property_id} — {l.maturity_date}</div>
+                      <div onClick={() => { const prop = properties.find(p => p.address === l.property_id); if (prop) openPropertyProfile(prop.id); }} style={{ fontSize: 12, color: C.muted, cursor: "pointer" }}>{l.property_id} — {l.maturity_date}</div>
                     </div>
                   ))}
                 </div>
@@ -4466,9 +5337,9 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                 {properties.map((p, i) => {
                   const cf = (p.monthly_rent || 0) - (p.monthly_expenses || 0);
                   return (
-                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: i < properties.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                  <div key={p.id} onClick={() => openPropertyProfile(p.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: i < properties.length - 1 ? `1px solid ${C.border}` : "none", cursor: "pointer" }}>
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.address}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.green }}>{p.address}</div>
                       <div style={{ fontSize: 12, color: C.muted }}>{fmtD(p.monthly_rent || 0)}/mo rent — {fmtD(cf)}/mo cash flow</div>
                     </div>
                     <span style={{
@@ -4532,7 +5403,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                   const cf = (p.monthly_rent || 0) - (p.monthly_expenses || 0);
                   return (
                   <div key={p.id} className="db-prop-row" style={{ display: "grid", gridTemplateColumns: "2fr 0.7fr 1fr 1fr 1fr", padding: "14px 16px", borderBottom: i < properties.length - 1 ? `1px solid ${C.border}` : "none", alignItems: "center" }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.address}</div>
+                    <div onClick={() => openPropertyProfile(p.id)} style={{ fontSize: 14, fontWeight: 600, color: C.green, cursor: "pointer" }}>{p.address}</div>
                     <span style={{ fontSize: 13, color: C.muted }}>{p.units || 1}</span>
                     <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{fmtD(p.monthly_rent || 0)}/mo</span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: cf >= 0 ? C.green : C.red }}>{fmtD(cf)}/mo</span>
@@ -4554,10 +5425,18 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
 
           {!dashPanel && propertiesNav === "rehabs" && <ActiveRehabs session={session} />}
           {!dashPanel && propertiesNav === "cashflow" && <CashFlowTracker session={session} />}
-          {!dashPanel && propertiesNav === "tenants" && <TenantTracker session={session} />}
-          {!dashPanel && propertiesNav === "maintenance" && <MaintenanceLog session={session} />}
-          {!dashPanel && propertiesNav === "financing" && <FinancingTracker session={session} />}
-          {!dashPanel && propertiesNav === "leases" && <LeaseRenewalTracker session={session} />}
+          {!dashPanel && propertiesNav === "tenants" && <TenantTracker session={session} onOpenTenant={openTenantProfile} onOpenProperty={(addr) => { const prop = properties.find(p => p.address === addr); if (prop) openPropertyProfile(prop.id); }} />}
+          {!dashPanel && propertiesNav === "maintenance" && <MaintenanceLog session={session} onOpenProperty={(addr) => { const prop = properties.find(p => p.address === addr); if (prop) openPropertyProfile(prop.id); }} />}
+          {!dashPanel && propertiesNav === "financing" && <FinancingTracker session={session} onOpenProperty={(addr) => { const prop = properties.find(p => p.address === addr); if (prop) openPropertyProfile(prop.id); }} />}
+          {!dashPanel && propertiesNav === "leases" && <LeaseRenewalTracker session={session} onOpenTenant={(leaseId) => { const lease = briefingLeases.find(l => l.id === leaseId); if (lease) { const tenant = briefingTenants.find(t => t.name === lease.tenant_name); if (tenant) openTenantProfile(tenant.id); } }} onOpenProperty={(addr) => { const prop = properties.find(p => p.address === addr); if (prop) openPropertyProfile(prop.id); }} />}
+          {!dashPanel && propertiesNav === "propertyDetail" && selectedPropertyId && (() => {
+            const prop = properties.find(p => p.id === selectedPropertyId);
+            if (!prop) return <div style={{ textAlign: "center", padding: 60, color: C.muted }}>Property not found.</div>;
+            return <PropertyProfile property={prop} tenants={briefingTenants} payments={briefingPayments} leases={briefingLeases} loans={briefingLoans} maintenance={briefingMaintenance} cashFlowEntries={briefingCashFlow} session={session} onBack={() => setPropertiesNav("dashboard")} onOpenTenant={openTenantProfile} onRefresh={refreshAll} />;
+          })()}
+          {!dashPanel && propertiesNav === "tenantDetail" && selectedTenantId && (
+            <TenantProfile tenantId={selectedTenantId} tenants={briefingTenants} payments={briefingPayments} session={session} onBack={() => { if (selectedPropertyId) setPropertiesNav("propertyDetail"); else setPropertiesNav("tenants"); }} onOpenProperty={openPropertyProfile} properties={properties} />
+          )}
         </div>
 
         {/* Mobile bottom tab bar — JS-driven */}
