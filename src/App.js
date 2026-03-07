@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Home, Users, DollarSign, Calendar, Wrench, TrendingUp, BarChart3, Building2, BookOpen, FileText, ClipboardList, Calculator, Search, Star, AlertTriangle, Check, X, ChevronRight, ArrowLeft, ArrowRight, Settings, MessageSquare, MoreHorizontal, HelpCircle, Hammer, Camera, Plus, Minus, Edit3, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
+import { Home, Users, DollarSign, Calendar, Wrench, TrendingUp, BarChart3, Building2, ClipboardList, Star, AlertTriangle, Check, X, ChevronRight, ArrowLeft, ArrowRight, Settings, MessageSquare, MoreHorizontal, HelpCircle, Hammer, Camera, Plus, Edit3, Trash2, Upload } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 // IMPORTANT: Replace anon key below with your real Supabase anon key (starts with eyJ...)
@@ -3201,7 +3201,6 @@ function ActiveRehabs({ session }) {
   const saveScorecard = async () => {
     if (!activeRehab) return;
     const scorecard = { actualARV: num(scorecardForm.actualARV), actualRehab: num(scorecardForm.actualRehab), actualHolding: num(scorecardForm.actualHolding), actualSellClose: num(scorecardForm.actualSellClose) };
-    const projected = activeRehab.projected || {};
     const actualProfit = scorecard.actualARV - scorecard.actualSellClose - (activeRehab.purchase_price || 0) - scorecard.actualRehab - scorecard.actualHolding;
     scorecard.actualProfit = actualProfit;
     await supabase.from("active_rehabs").update({ scorecard, status: "closed" }).eq("id", activeRehab.id);
@@ -3216,7 +3215,6 @@ function ActiveRehabs({ session }) {
     const notes = (activeRehab.notes || []).sort((a, b) => b.id - a.id);
     const photos = activeRehab.photos || [];
     const projected = activeRehab.projected || {};
-    const totalBid = contractors.reduce((s, c) => s + c.bid, 0);
     const totalPaid = contractors.reduce((s, c) => s + c.paid, 0);
     const totalChangeOrders = contractors.reduce((s, c) => s + (c.changeOrders || 0), 0);
     const budgetRemaining = (projected.rehabCost || 0) - totalPaid;
