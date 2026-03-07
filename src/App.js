@@ -4618,6 +4618,14 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
   const [showMore, setShowMore] = useState(false);
   const [showFlipVsRent, setShowFlipVsRent] = useState(false);
   const [dashPanel, setDashPanel] = useState(null); // "settings" | "feedback" | null
+  const [pwaPrompt, setPwaPrompt] = useState(null);
+  const [pwaDismissed, setPwaDismissed] = useState(false);
+
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setPwaPrompt(e); };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
   const [convertDeal, setConvertDeal] = useState(null); // deal object to convert to property
   const [convertForm, setConvertForm] = useState({ address: "", units: "1", monthlyRent: "", monthlyExpenses: "", loanBalance: "" });
   const [convertSaving, setConvertSaving] = useState(false);
@@ -5210,6 +5218,17 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
           )}
         </div>
 
+        {/* PWA install banner — mobile only, once per session */}
+        {isMobile && pwaPrompt && !pwaDismissed && (
+          <div style={{ position: "fixed", bottom: 68, left: 12, right: 12, zIndex: 210, background: C.green, borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 4px 20px rgba(0,0,0,0.25)", fontFamily: "'DM Sans', sans-serif" }}>
+            <div style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>Install DoorBase for a better experience</div>
+            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+              <button onClick={() => { pwaPrompt.prompt(); pwaPrompt.userChoice.then(() => { setPwaPrompt(null); setPwaDismissed(true); }); }} style={{ background: "#fff", color: C.greenDark, border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Install</button>
+              <button onClick={() => setPwaDismissed(true)} style={{ background: "transparent", color: "rgba(255,255,255,0.8)", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 8, padding: "7px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Dismiss</button>
+            </div>
+          </div>
+        )}
+
         {/* Mobile bottom tab bar — JS-driven */}
         {isMobile && (
         <div className="db-bottomtab" style={{
@@ -5550,6 +5569,17 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
             <TenantProfile tenantId={selectedTenantId} tenants={briefingTenants} payments={briefingPayments} session={session} onBack={() => { if (selectedPropertyId) setPropertiesNav("propertyDetail"); else setPropertiesNav("tenants"); }} onOpenProperty={openPropertyProfile} properties={properties} />
           )}
         </div>
+
+        {/* PWA install banner — mobile only, once per session */}
+        {isMobile && pwaPrompt && !pwaDismissed && (
+          <div style={{ position: "fixed", bottom: 68, left: 12, right: 12, zIndex: 210, background: C.green, borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 4px 20px rgba(0,0,0,0.25)", fontFamily: "'DM Sans', sans-serif" }}>
+            <div style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>Install DoorBase for a better experience</div>
+            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+              <button onClick={() => { pwaPrompt.prompt(); pwaPrompt.userChoice.then(() => { setPwaPrompt(null); setPwaDismissed(true); }); }} style={{ background: "#fff", color: C.greenDark, border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Install</button>
+              <button onClick={() => setPwaDismissed(true)} style={{ background: "transparent", color: "rgba(255,255,255,0.8)", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 8, padding: "7px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Dismiss</button>
+            </div>
+          </div>
+        )}
 
         {/* Mobile bottom tab bar — JS-driven */}
         {isMobile && (
