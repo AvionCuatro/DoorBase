@@ -314,6 +314,144 @@ function EmailCaptureModal({ onClose, results, mode, source = 'analyzer' }) {
   );
 }
 
+// ─── EMAIL RESULTS MODAL (sends branded HTML email via Edge Function) ────────
+function EmailResultsModal({ onClose, result, mode }) {
+  const [dealName, setDealName] = useState("");
+  const [senderEmail, setSenderEmail] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | loading | success | error
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const buildStats = () => {
+    if (mode === "hold") {
+      return [
+        { label: "Down Payment", value: fmtD(result.down) },
+        { label: "Loan Amount", value: fmtD(result.loanAmt) },
+        { label: "Monthly Mortgage", value: fmtD(result.mortgage) },
+        { label: "Gross Rental Income", value: fmtD(result.grossRent) + "/mo" },
+        { label: "Vacancy Loss", value: fmtD(result.vacancyLoss) + "/mo" },
+        { label: "Effective Income", value: fmtD(result.effectiveIncome) + "/mo" },
+        { label: "Operating Expenses", value: fmtD(result.opEx) + "/mo" },
+        { label: "Net Operating Income", value: fmtD(result.noi) + "/mo" },
+        { label: "Monthly Cash Flow", value: fmtD(result.cashFlow), highlight: true },
+        { label: "Annual Cash Flow", value: fmtD(result.annualCashFlow), highlight: true },
+        { label: "Cap Rate", value: fmtP(result.capRate), highlight: true },
+        { label: "Cash-on-Cash Return", value: fmtP(result.cashOnCash), highlight: true },
+        { label: "Gross Rent Multiplier", value: isNaN(result.grm) ? "\u2014" : result.grm.toFixed(2) + "x" },
+        { label: "Expense Ratio", value: fmtP(result.expenseRatio) },
+      ];
+    }
+    return [
+      { label: "Buy Closing Costs", value: fmtD(result.buyClose) },
+      { label: "Rehab Cost", value: fmtD(result.totalIn - result.buyClose - result.holdCost - result.interestCost) },
+      { label: "Holding Costs", value: fmtD(result.holdCost) },
+      { label: "Interest / Finance Cost", value: fmtD(result.interestCost) },
+      { label: "Total Money In", value: fmtD(result.totalIn) },
+      { label: "ARV (Sale Price)", value: fmtD(result.arv) },
+      { label: "Sell Closing Costs", value: fmtD(result.sellClose) },
+      { label: "Net Profit", value: fmtD(result.netProfit), highlight: true },
+      { label: "ROI", value: fmtP(result.roi), highlight: true },
+      { label: "ARV Spread", value: fmtP(result.arvSpread) },
+      { label: "Max Allowable Offer (70% Rule)", value: fmtD(result.maxAllowable) },
+    ];
+  };
+
+  const handleSend = async () => {
+    if (!senderEmail || !senderEmail.includes("@")) return setErrorMsg("Enter a valid sender email.");
+    if (!recipientEmail || !recipientEmail.includes("@")) return setErrorMsg("Enter a valid recipient email.");
+    setErrorMsg("");
+    setStatus("loading");
+    try {
+      const res = await supabase.functions.invoke("send-deal-email", {
+        body: {
+          senderEmail,
+          recipientEmail,
+          dealName: dealName || (mode === "hold" ? "Buy & Hold Deal" : "Fix & Flip Deal"),
+          mode,
+          verdict: result.verdict,
+          stats: buildStats(),
+        },
+      });
+      if (res.error) {
+        setStatus("error");
+        setErrorMsg("Failed to send. Please try again.");
+      } else {
+        setStatus("success");
+      }
+    } catch {
+      setStatus("error");
+      setErrorMsg("Failed to send. Please try again.");
+    }
+  };
+
+  const inp = { width: "100%", padding: "12px 14px", borderRadius: 8, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, fontFamily: "'DM Sans', sans-serif", outline: "none", boxSizing: "border-box", background: C.inputBg };
+
+  const verdictCfg = {
+    green: { bg: C.greenLight, border: "#86efac", color: C.green, label: "DEAL WORKS" },
+    yellow: { bg: C.yellowLight, border: "#fcd34d", color: C.yellow, label: "MARGINAL" },
+    red: { bg: C.redLight, border: "#fca5a5", color: C.red, label: "PASS ON THIS ONE" },
+  }[result.verdict] || { bg: C.redLight, border: "#fca5a5", color: C.red, label: "PASS" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: C.white, borderRadius: 16, width: "100%", maxWidth: 460, padding: "28px 24px", boxShadow: "0 24px 64px rgba(0,0,0,0.2)", margin: "0 16px", maxHeight: "90vh", overflowY: "auto" }}>
+        {status === "success" ? (
+          <div style={{ textAlign: "center", padding: "12px 0" }}>
+            <div style={{ width: 48, height: 48, borderRadius: "50%", background: C.greenLight, border: `2px solid #86efac`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 20, color: C.green, fontWeight: 800 }}><Check size={24} /></div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 6 }}>Email sent!</div>
+            <div style={{ fontSize: 14, color: C.muted, lineHeight: 1.6, marginBottom: 24 }}>
+              Your branded deal analysis has been sent to <strong>{recipientEmail}</strong>.
+            </div>
+            <button onClick={onClose} style={{ background: C.green, border: "none", borderRadius: 10, padding: "12px 32px", color: C.white, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Done</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 4 }}>Email Deal Results</div>
+                <div style={{ fontSize: 13, color: C.muted }}>Send a branded report with your full deal breakdown.</div>
+              </div>
+              <button onClick={onClose} style={{ background: C.bg, border: "none", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 15, color: C.muted, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={14} /></button>
+            </div>
+
+            <div style={{ background: verdictCfg.bg, border: `1px solid ${verdictCfg.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: verdictCfg.color, letterSpacing: "0.04em" }}>{verdictCfg.label}</span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: verdictCfg.color }}>
+                {mode === "hold" ? fmtD(result.cashFlow) + "/mo" : fmtD(result.netProfit)}
+              </span>
+            </div>
+
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 4 }}>Deal Name (optional)</label>
+              <input value={dealName} onChange={e => setDealName(e.target.value)} placeholder="e.g. 123 Main St" style={inp} />
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 4 }}>Your Email</label>
+              <input type="email" value={senderEmail} onChange={e => setSenderEmail(e.target.value)} placeholder="you@email.com" style={inp} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 4 }}>Recipient Email</label>
+              <input type="email" value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)} placeholder="partner@email.com" onKeyDown={e => e.key === "Enter" && handleSend()} style={inp} />
+            </div>
+
+            {errorMsg && <div style={{ fontSize: 13, color: C.red, marginBottom: 12 }}>{errorMsg}</div>}
+
+            <button onClick={handleSend} disabled={status === "loading"} style={{
+              width: "100%", padding: "14px", background: C.green, border: "none", borderRadius: 10,
+              color: C.white, fontSize: 15, fontWeight: 700, cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(22,163,74,0.4)",
+              opacity: status === "loading" ? 0.75 : 1,
+            }}>{status === "loading" ? "Sending..." : "Send Deal Report"}</button>
+            <div style={{ fontSize: 11, color: C.mutedLight, textAlign: "center", marginTop: 8 }}>
+              Sends a branded HTML email with your full analysis.
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const HERO_IMG = "/hero.png";
 
 // ─── PRO TRIGGER ──────────────────────────────────────────────────────────────
@@ -890,7 +1028,7 @@ function BuyHoldAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
             border: `1.5px solid ${C.green}`, borderRadius: 10,
             color: C.green, fontSize: 14, fontWeight: 700, cursor: "pointer",
             fontFamily: "'DM Sans', sans-serif", marginBottom: 10,
-          }}>📧 Email My Results</button>
+          }}><MessageSquare size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />Email My Results</button>
           <div onClick={onScrollToPro} style={{
             background: "linear-gradient(135deg, #15803d, #16a34a)", borderRadius: 12,
             padding: "16px", cursor: "pointer", textAlign: "center",
@@ -1311,6 +1449,12 @@ function FixFlipAnalyzer({ standards, onScrollToPro, onEmailResults, isPro, onUp
               Never pay more than 70% of ARV minus rehab. Your max allowable offer is <strong>{fmtD(result.maxAllowable)}</strong>.
             </div>
           </Card>
+          <button onClick={() => onEmailResults(result)} style={{
+            width: "100%", padding: "13px", background: C.white,
+            border: `1.5px solid ${C.green}`, borderRadius: 10,
+            color: C.green, fontSize: 14, fontWeight: 700, cursor: "pointer",
+            fontFamily: "'DM Sans', sans-serif", marginBottom: 10,
+          }}><MessageSquare size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />Email My Results</button>
           <div onClick={onScrollToPro} style={{
             background: "linear-gradient(135deg, #15803d, #16a34a)", borderRadius: 12,
             padding: "16px", cursor: "pointer", textAlign: "center",
@@ -3886,6 +4030,7 @@ export default function App() {
   const [showEmailCapture, setShowEmailCapture] = useState(false);
   const [captureResults, setCaptureResults] = useState(null);
   const [emailSource, setEmailSource] = useState('analyzer');
+  const [emailResultsModal, setEmailResultsModal] = useState(null); // { result, mode }
   const { session, loading: authLoading, signOut } = useAuth();
   const [showAuthScreen, setShowAuthScreen] = useState(false);
   const isPro = !!session;
@@ -3944,6 +4089,7 @@ export default function App() {
 
       {showSettings && <SettingsPanel standards={standards} onSave={setStandards} onClose={() => setShowSettings(false)} />}
       {showEmailCapture && <EmailCaptureModal onClose={() => { setShowEmailCapture(false); setEmailSource('analyzer'); }} results={captureResults} mode={mode} source={emailSource} />}
+      {emailResultsModal && <EmailResultsModal onClose={() => setEmailResultsModal(null)} result={emailResultsModal.result} mode={emailResultsModal.mode} />}
 
       {authLoading ? (
         <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.nav }}>
@@ -3958,7 +4104,7 @@ export default function App() {
           setMode={setMode}
           isPro={isPro}
           onShowCapture={() => { setCaptureResults(null); setEmailSource('pro'); setShowEmailCapture(true); }}
-          onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }}
+          onEmailResults={(r) => setEmailResultsModal({ result: r, mode })}
           onSignOut={async () => { await signOut(); setShowAuthScreen(false); }}
           session={session}
         />
@@ -4158,8 +4304,8 @@ export default function App() {
           </div>
 
           {mode === "hold"
-            ? <BuyHoldAnalyzer standards={standards} onScrollToPro={() => setShowAuthScreen(true)} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} isPro={isPro} onUpgrade={() => setShowAuthScreen(true)} />
-            : <FixFlipAnalyzer standards={standards} onScrollToPro={() => setShowAuthScreen(true)} onEmailResults={(r) => { setCaptureResults(r); setShowEmailCapture(true); }} isPro={isPro} onUpgrade={() => setShowAuthScreen(true)} />}
+            ? <BuyHoldAnalyzer standards={standards} onScrollToPro={() => setShowAuthScreen(true)} onEmailResults={(r) => setEmailResultsModal({ result: r, mode })} isPro={isPro} onUpgrade={() => setShowAuthScreen(true)} />
+            : <FixFlipAnalyzer standards={standards} onScrollToPro={() => setShowAuthScreen(true)} onEmailResults={(r) => setEmailResultsModal({ result: r, mode })} isPro={isPro} onUpgrade={() => setShowAuthScreen(true)} />}
         </div>
       </div>
 
