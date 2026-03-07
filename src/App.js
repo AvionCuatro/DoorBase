@@ -3507,6 +3507,19 @@ function ActiveRehabs({ session }) {
 function PropertyProfile({ property, tenants, payments, leases, loans, maintenance, cashFlowEntries, session, onBack, onOpenTenant, onRefresh }) {
   const [tab, setTab] = useState("tenants");
 
+  // Editable property fields
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState({
+    address: property.address || "", units: String(property.units || 1),
+    purchase_price: String(property.purchase_price || ""), monthly_rent: String(property.monthly_rent || ""),
+    monthly_expenses: String(property.monthly_expenses || ""), loan_balance: String(property.loan_balance || ""),
+  });
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Notes state
+  const [notes, setNotes] = useState(property.notes || "");
+  const [notesSaving, setNotesSaving] = useState(false);
+
   // Documents state
   const [docs, setDocs] = useState([]);
   const [docModal, setDocModal] = useState(null);
@@ -3537,6 +3550,7 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
   const [vendors, setVendors] = useState(property.vendors || []);
   const [vendorModal, setVendorModal] = useState(null);
   const [vendorForm, setVendorForm] = useState({ name: "", phone: "", category: "plumber", notes: "" });
+  const [editVendorIdx, setEditVendorIdx] = useState(null);
   const VENDOR_CATEGORIES = ["plumber", "electrician", "landscaper", "handyman", "hvac", "roofer", "painter", "cleaner", "general_contractor", "other"];
 
   // Utilities state
@@ -3546,19 +3560,24 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
     water: { provider: "", account: "", phone: "" },
     trash: { provider: "", account: "", phone: "" },
   });
+  const [utilitiesDirty, setUtilitiesDirty] = useState(false);
 
   // School district state
   const [schoolDistrict, setSchoolDistrict] = useState(property.school_district || { district: "", elementary: "", middle: "", high: "" });
+  const [schoolDirty, setSchoolDirty] = useState(false);
 
   // Photo state
   const [photoUrl, setPhotoUrl] = useState(property.photo_url || "");
 
-  // Load documents
+  // Load documents on mount
   useEffect(() => {
     if (!session || !property.id) return;
     supabase.from("property_documents").select("*").eq("property_id", property.id).order("created_at", { ascending: false })
       .then(res => { if (res.data) setDocs(res.data); });
   }, [session, property.id]);
+
+  // Load notes from property
+  useEffect(() => { setNotes(property.notes || ""); }, [property.notes]);
 
   const propTenants = tenants.filter(t => t.property_id === property.address || t.property_id === property.id);
   const propPayments = payments.filter(p => p.property_id === property.address || p.property_id === property.id);
@@ -3569,36 +3588,60 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
   const currentTenant = propTenants.find(t => t.status === "current");
   const currentLease = propLeases.sort((a, b) => new Date(b.lease_end || 0) - new Date(a.lease_end || 0))[0];
 
-  const savePropertyField = async (fields) => {
-    await supabase.from("properties").update(fields).eq("id", property.id);
+  // ── Save helpers ──
+  const savePropertyFields = async (fields) => {
+    const res = await supabase.from("properties").update(fields).eq("id", property.id);
+    dbLog("properties.update", res);
+    if (onRefresh) onRefresh();
   };
 
-  const saveCompliance = async (updated) => {
+  const saveEdit = async () => {
+    setEditSaving(true);
+    await savePropertyFields({
+      address: editForm.address, units: parseInt(editForm.units) || 1,
+      purchase_price: num(editForm.purchase_price), monthly_rent: num(editForm.monthly_rent),
+      monthly_expenses: num(editForm.monthly_expenses), loan_balance: num(editForm.loan_balance),
+    });
+    setEditSaving(false);
+    setEditMode(false);
+  };
+
+  const saveNotes = async () => {
+    setNotesSaving(true);
+    await savePropertyFields({ notes });
+    setNotesSaving(false);
+  };
+
+  const saveCompliance = async (updated, customUpdated) => {
     setCompliance(updated);
-    savePropertyField({ compliance: updated, custom_compliance: customCompliance });
+    const custom = customUpdated || customCompliance;
+    if (customUpdated) setCustomCompliance(custom);
+    await savePropertyFields({ compliance: updated, custom_compliance: custom });
   };
 
   const saveVendors = async (updated) => {
     setVendors(updated);
-    savePropertyField({ vendors: updated });
+    await savePropertyFields({ vendors: updated });
   };
 
-  const saveUtilities = async (updated) => {
-    setUtilities(updated);
-    savePropertyField({ utilities: updated });
+  const saveUtilities = async () => {
+    setUtilitiesDirty(false);
+    await savePropertyFields({ utilities });
   };
 
-  const saveSchoolDistrict = async (updated) => {
-    setSchoolDistrict(updated);
-    savePropertyField({ school_district: updated });
+  const saveSchool = async () => {
+    setSchoolDirty(false);
+    await savePropertyFields({ school_district: schoolDistrict });
   };
 
+  // ── Document CRUD ──
   const addDocument = async () => {
     if (!docForm.name) return;
     const res = await supabase.from("property_documents").insert({
       user_id: session.user.id, property_id: property.id,
       name: docForm.name, doc_type: docForm.type, file_name: docForm.file?.name || "",
     }).select().single();
+    dbLog("property_documents.insert", res);
     if (res.data) setDocs(prev => [res.data, ...prev]);
     setDocModal(null);
     setDocForm({ name: "", type: "general", file: null });
@@ -3617,17 +3660,21 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
     }
   };
 
-  const addVendor = () => {
+  // ── Vendor CRUD ──
+  const openAddVendor = () => { setVendorForm({ name: "", phone: "", category: "plumber", notes: "" }); setEditVendorIdx(null); setVendorModal(true); };
+  const openEditVendor = (idx) => { const v = vendors[idx]; setVendorForm({ name: v.name, phone: v.phone, category: v.category, notes: v.notes }); setEditVendorIdx(idx); setVendorModal(true); };
+  const saveVendor = () => {
     if (!vendorForm.name) return;
-    const updated = [...vendors, { ...vendorForm, id: Date.now() }];
+    let updated;
+    if (editVendorIdx !== null) {
+      updated = [...vendors]; updated[editVendorIdx] = { ...vendorForm, id: vendors[editVendorIdx].id };
+    } else {
+      updated = [...vendors, { ...vendorForm, id: Date.now() }];
+    }
     saveVendors(updated);
     setVendorModal(null);
-    setVendorForm({ name: "", phone: "", category: "plumber", notes: "" });
   };
-
-  const deleteVendor = (id) => {
-    saveVendors(vendors.filter(v => v.id !== id));
-  };
+  const deleteVendor = (id) => saveVendors(vendors.filter(v => v.id !== id));
 
   const complianceStatusBadge = (status) => {
     const cfg = { valid: { bg: C.greenLight, color: C.greenDark, label: "VALID" }, expired: { bg: C.redLight, color: C.red, label: "EXPIRED" }, pending: { bg: C.bg, color: C.muted, label: "PENDING" } }[status] || { bg: C.bg, color: C.muted, label: "PENDING" };
@@ -3644,40 +3691,51 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
     { id: "vendors", label: "Vendors" },
     { id: "utilities", label: "Utilities" },
     { id: "school", label: "School District" },
+    { id: "notes", label: "Notes" },
   ];
 
   return (
     <div>
-      {/* Back button */}
       <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", marginBottom: 20, color: C.muted, fontSize: 13, fontWeight: 600 }}>
         <ArrowLeft size={16} /> Back to Properties
       </div>
 
       {/* Header */}
       <div style={{ display: "flex", gap: 20, marginBottom: 28, flexWrap: "wrap" }}>
-        {/* Photo slot */}
         <label style={{ width: 140, height: 100, borderRadius: 12, border: `2px dashed ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", overflow: "hidden", flexShrink: 0, background: photoUrl ? "none" : C.bg }}>
-          {photoUrl ? (
-            <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          ) : (
-            <div style={{ textAlign: "center" }}>
-              <Camera size={24} color={C.mutedLight} />
-              <div style={{ fontSize: 10, color: C.mutedLight, marginTop: 4 }}>Add Photo</div>
-            </div>
+          {photoUrl ? <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (
+            <div style={{ textAlign: "center" }}><Camera size={24} color={C.mutedLight} /><div style={{ fontSize: 10, color: C.mutedLight, marginTop: 4 }}>Add Photo</div></div>
           )}
           <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: "none" }} />
         </label>
         <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
-            <div style={{ fontSize: 26, fontWeight: 800, color: C.text }}>{property.address}</div>
-            <span style={{
-              background: property.status === "late" ? C.redLight : C.greenLight,
-              color: property.status === "late" ? C.red : C.greenDark,
-              fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 6,
-              textTransform: "uppercase", letterSpacing: "0.04em",
-            }}>{property.status === "late" ? "LATE" : "CURRENT"}</span>
-          </div>
-          <div style={{ fontSize: 13, color: C.muted }}>{property.units || 1} unit{(property.units || 1) > 1 ? "s" : ""}</div>
+          {editMode ? (
+            <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div><label style={_modalLabel}>Address</label><input value={editForm.address} onChange={e => setEditForm(p => ({ ...p, address: e.target.value }))} style={_modalInput} /></div>
+                <div><label style={_modalLabel}>Units</label><input type="number" value={editForm.units} onChange={e => setEditForm(p => ({ ...p, units: e.target.value }))} style={_modalInput} /></div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div><label style={_modalLabel}>Purchase Price</label><input type="number" value={editForm.purchase_price} onChange={e => setEditForm(p => ({ ...p, purchase_price: e.target.value }))} style={_modalInput} /></div>
+                <div><label style={_modalLabel}>Monthly Rent</label><input type="number" value={editForm.monthly_rent} onChange={e => setEditForm(p => ({ ...p, monthly_rent: e.target.value }))} style={_modalInput} /></div>
+                <div><label style={_modalLabel}>Monthly Expenses</label><input type="number" value={editForm.monthly_expenses} onChange={e => setEditForm(p => ({ ...p, monthly_expenses: e.target.value }))} style={_modalInput} /></div>
+                <div><label style={_modalLabel}>Loan Balance</label><input type="number" value={editForm.loan_balance} onChange={e => setEditForm(p => ({ ...p, loan_balance: e.target.value }))} style={_modalInput} /></div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={saveEdit} disabled={editSaving} style={{ ..._addBtn, opacity: editSaving ? 0.7 : 1 }}>{editSaving ? "Saving..." : "Save"}</button>
+                <button onClick={() => setEditMode(false)} style={{ ...(_editBtn), padding: "8px 14px", border: `1px solid ${C.border}`, borderRadius: 8 }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+                <div style={{ fontSize: 26, fontWeight: 800, color: C.text }}>{property.address}</div>
+                <span style={{ background: property.status === "late" ? C.redLight : C.greenLight, color: property.status === "late" ? C.red : C.greenDark, fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 6, textTransform: "uppercase" }}>{property.status === "late" ? "LATE" : "CURRENT"}</span>
+                <button onClick={() => setEditMode(true)} style={{ ...(_editBtn), color: C.green }}>Edit</button>
+              </div>
+              <div style={{ fontSize: 13, color: C.muted }}>{property.units || 1} unit{(property.units || 1) > 1 ? "s" : ""}</div>
+            </>
+          )}
         </div>
       </div>
 
@@ -3733,11 +3791,7 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
                         <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Unit {t.unit_number || "—"} — {fmtD(t.monthly_rent || 0)}/mo — Lease ends {t.lease_end || "N/A"}</div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{
-                          background: t.status === "current" ? C.greenLight : t.status === "past_tenant" ? C.bg : C.yellowLight,
-                          color: t.status === "current" ? C.greenDark : t.status === "past_tenant" ? C.mutedLight : C.yellowDark,
-                          fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase",
-                        }}>{(t.status || "current").replace(/_/g, " ")}</span>
+                        <span style={{ background: t.status === "current" ? C.greenLight : t.status === "past_tenant" ? C.bg : C.yellowLight, color: t.status === "current" ? C.greenDark : t.status === "past_tenant" ? C.mutedLight : C.yellowDark, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase" }}>{(t.status || "current").replace(/_/g, " ")}</span>
                         <ChevronRight size={16} color={C.mutedLight} />
                       </div>
                     </div>
@@ -3764,13 +3818,9 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
                 <div key={m.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{m.title}</div>
-                    <span style={{
-                      background: m.status === "closed" ? C.greenLight : m.priority === "urgent" ? C.redLight : C.yellowLight,
-                      color: m.status === "closed" ? C.greenDark : m.priority === "urgent" ? C.red : C.yellowDark,
-                      fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase",
-                    }}>{m.status === "closed" ? "CLOSED" : m.priority === "urgent" ? "URGENT" : "OPEN"}</span>
+                    <span style={{ background: m.status === "closed" ? C.greenLight : m.priority === "urgent" ? C.redLight : C.yellowLight, color: m.status === "closed" ? C.greenDark : m.priority === "urgent" ? C.red : C.yellowDark, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase" }}>{m.status === "closed" ? "CLOSED" : m.priority === "urgent" ? "URGENT" : "OPEN"}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>{m.description}</div>
+                  {m.description && <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>{m.description}</div>}
                   <div style={{ display: "flex", gap: 16, fontSize: 12 }}>
                     {m.vendor && <span style={{ color: C.text, fontWeight: 600 }}>Vendor: {m.vendor}</span>}
                     {m.cost > 0 && <span style={{ color: C.text, fontWeight: 600 }}>Cost: {fmtD(m.cost)}</span>}
@@ -3790,7 +3840,7 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
           {propCashFlow.length === 0 ? (
             <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
               <BarChart3 size={32} color={C.mutedLight} style={{ marginBottom: 8, opacity: 0.4 }} />
-              <div style={{ fontSize: 14, color: C.muted }}>No cash flow entries for this property yet. Record payments and set projections in Cash Flow Tracker.</div>
+              <div style={{ fontSize: 14, color: C.muted }}>No cash flow entries yet. Record payments and set projections in Cash Flow Tracker.</div>
             </div>
           ) : (
             <>
@@ -3850,10 +3900,10 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
                       )}
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
-                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Balance</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{fmtD(l.current_balance || 0)}</div></div>
-                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Rate</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{l.interest_rate || 0}%</div></div>
-                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Payment</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{fmtD(l.monthly_payment || 0)}/mo</div></div>
-                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Type</div><div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{l.loan_type || "Fixed"}</div></div>
+                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Balance</div><div style={{ fontSize: 14, fontWeight: 700 }}>{fmtD(l.current_balance || 0)}</div></div>
+                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Rate</div><div style={{ fontSize: 14, fontWeight: 700 }}>{l.interest_rate || 0}%</div></div>
+                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Payment</div><div style={{ fontSize: 14, fontWeight: 700 }}>{fmtD(l.monthly_payment || 0)}/mo</div></div>
+                      <div><div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: "uppercase" }}>Type</div><div style={{ fontSize: 14, fontWeight: 600 }}>{l.loan_type || "Fixed"}</div></div>
                     </div>
                     {l.maturity_date && <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>Maturity: {l.maturity_date}</div>}
                   </div>
@@ -3926,7 +3976,7 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
             <div style={_modalOverlay}><div style={_modalBox}>
               {_modalHeader("Add Compliance Item", () => setAddComplianceModal(false))}
               <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Item Name</label><input value={newComplianceName} onChange={e => setNewComplianceName(e.target.value)} placeholder="e.g. Fire Escape Inspection" style={_modalInput} /></div>
-              <button onClick={() => { if (newComplianceName) { setCustomCompliance(prev => [...prev, { key: "custom_" + Date.now(), label: newComplianceName, status: "pending", expiryDate: "", document: null }]); setNewComplianceName(""); setAddComplianceModal(false); } }} style={_modalSubmit()}>Add Item</button>
+              <button onClick={() => { if (newComplianceName) { const updated = [...customCompliance, { key: "custom_" + Date.now(), label: newComplianceName, status: "pending", expiryDate: "" }]; saveCompliance(compliance, updated); setNewComplianceName(""); setAddComplianceModal(false); } }} style={_modalSubmit()}>Add Item</button>
             </div></div>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -3939,27 +3989,18 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
               return (
                 <div key={item.key} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <Shield size={16} color={C.green} />
-                      <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{item.label}</span>
-                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Shield size={16} color={C.green} /><span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{item.label}</span></div>
                     {complianceStatusBadge(c.status)}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 12, alignItems: "end" }}>
-                    <div>
-                      <label style={_modalLabel}>Status</label>
+                    <div><label style={_modalLabel}>Status</label>
                       <select value={c.status} onChange={e => { const updated = { ...compliance, [item.key]: { ...c, status: e.target.value } }; saveCompliance(updated); }} style={{ ..._modalInput, cursor: "pointer", fontSize: 12, padding: "8px 10px" }}>
                         <option value="pending">Pending</option><option value="valid">Valid</option><option value="expired">Expired</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={_modalLabel}>Expiry Date</label>
-                      <input type="date" value={c.expiryDate} onChange={e => { const updated = { ...compliance, [item.key]: { ...c, expiryDate: e.target.value } }; saveCompliance(updated); }} style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} />
-                    </div>
+                      </select></div>
+                    <div><label style={_modalLabel}>Expiry Date</label>
+                      <input type="date" value={c.expiryDate} onChange={e => { const updated = { ...compliance, [item.key]: { ...c, expiryDate: e.target.value } }; saveCompliance(updated); }} style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} /></div>
                     <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", padding: "8px 12px", background: C.bg, borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, fontWeight: 600, color: C.muted }}>
-                      <Upload size={14} /> Upload
-                      <input type="file" style={{ display: "none" }} onChange={() => {}} />
-                    </label>
+                      <Upload size={14} /> Upload<input type="file" style={{ display: "none" }} onChange={() => {}} /></label>
                   </div>
                 </div>
               );
@@ -3967,26 +4008,19 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
             {customCompliance.map((item, idx) => (
               <div key={item.key} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Shield size={16} color={C.green} />
-                    <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{item.label}</span>
-                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Shield size={16} color={C.green} /><span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{item.label}</span></div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     {complianceStatusBadge(item.status)}
-                    <button onClick={() => setCustomCompliance(prev => prev.filter((_, i) => i !== idx))} style={{ ...(_editBtn), color: C.red }}><Trash2 size={12} /></button>
+                    <button onClick={() => { const updated = customCompliance.filter((_, i) => i !== idx); saveCompliance(compliance, updated); }} style={{ ...(_editBtn), color: C.red }}><Trash2 size={12} /></button>
                   </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div>
-                    <label style={_modalLabel}>Status</label>
-                    <select value={item.status} onChange={e => { const updated = [...customCompliance]; updated[idx] = { ...item, status: e.target.value }; setCustomCompliance(updated); }} style={{ ..._modalInput, cursor: "pointer", fontSize: 12, padding: "8px 10px" }}>
+                  <div><label style={_modalLabel}>Status</label>
+                    <select value={item.status} onChange={e => { const updated = [...customCompliance]; updated[idx] = { ...item, status: e.target.value }; saveCompliance(compliance, updated); }} style={{ ..._modalInput, cursor: "pointer", fontSize: 12, padding: "8px 10px" }}>
                       <option value="pending">Pending</option><option value="valid">Valid</option><option value="expired">Expired</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={_modalLabel}>Expiry Date</label>
-                    <input type="date" value={item.expiryDate || ""} onChange={e => { const updated = [...customCompliance]; updated[idx] = { ...item, expiryDate: e.target.value }; setCustomCompliance(updated); }} style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} />
-                  </div>
+                    </select></div>
+                  <div><label style={_modalLabel}>Expiry Date</label>
+                    <input type="date" value={item.expiryDate || ""} onChange={e => { const updated = [...customCompliance]; updated[idx] = { ...item, expiryDate: e.target.value }; saveCompliance(compliance, updated); }} style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} /></div>
                 </div>
               </div>
             ))}
@@ -3997,25 +4031,24 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
       {/* ── Vendors Tab ── */}
       {tab === "vendors" && (
         <div>
-          {vendorModal !== null && (
+          {vendorModal && (
             <div style={_modalOverlay}><div style={_modalBox}>
-              {_modalHeader("Add Vendor", () => setVendorModal(null))}
+              {_modalHeader(editVendorIdx !== null ? "Edit Vendor" : "Add Vendor", () => setVendorModal(null))}
               <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Vendor Name</label><input value={vendorForm.name} onChange={e => setVendorForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Joe's Plumbing" style={_modalInput} /></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
                 <div><label style={_modalLabel}>Phone</label><input value={vendorForm.phone} onChange={e => setVendorForm(p => ({ ...p, phone: e.target.value }))} placeholder="555-0101" style={_modalInput} /></div>
                 <div><label style={_modalLabel}>Category</label>
                   <select value={vendorForm.category} onChange={e => setVendorForm(p => ({ ...p, category: e.target.value }))} style={{ ..._modalInput, cursor: "pointer" }}>
                     {VENDOR_CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</option>)}
-                  </select>
-                </div>
+                  </select></div>
               </div>
               <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Notes</label><input value={vendorForm.notes} onChange={e => setVendorForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" style={_modalInput} /></div>
-              <button onClick={addVendor} style={_modalSubmit()}>Add Vendor</button>
+              <button onClick={saveVendor} style={_modalSubmit()}>{editVendorIdx !== null ? "Save Changes" : "Add Vendor"}</button>
             </div></div>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Vendors</div>
-            <button onClick={() => setVendorModal(true)} style={_addBtn}>+ Add Vendor</button>
+            <button onClick={openAddVendor} style={_addBtn}>+ Add Vendor</button>
           </div>
           {vendors.length === 0 ? (
             <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
@@ -4024,14 +4057,17 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
             </div>
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
-              {vendors.map(v => (
+              {vendors.map((v, idx) => (
                 <div key={v.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{v.name}</div>
-                      <span style={{ background: C.greenLight, color: C.greenDark, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 4, textTransform: "uppercase" }}>{v.category.replace(/_/g, " ")}</span>
+                      <span style={{ background: C.greenLight, color: C.greenDark, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 4, textTransform: "uppercase" }}>{(v.category || "").replace(/_/g, " ")}</span>
                     </div>
-                    <button onClick={() => deleteVendor(v.id)} style={{ ...(_editBtn), color: C.red }}><Trash2 size={14} /></button>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => openEditVendor(idx)} style={{ ...(_editBtn), color: C.green }}>Edit</button>
+                      <button onClick={() => deleteVendor(v.id)} style={{ ...(_editBtn), color: C.red }}><Trash2 size={14} /></button>
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: 16, fontSize: 12, color: C.muted }}>
                     {v.phone && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Phone size={12} /> {v.phone}</span>}
@@ -4047,7 +4083,10 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
       {/* ── Utilities Tab ── */}
       {tab === "utilities" && (
         <div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 16 }}>Utilities</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Utilities</div>
+            {utilitiesDirty && <button onClick={saveUtilities} style={_addBtn}>Save Utilities</button>}
+          </div>
           <div style={{ display: "grid", gap: 14 }}>
             {[
               { key: "electric", label: "Electric", Icon: Zap, color: "#f59e0b" },
@@ -4056,6 +4095,7 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
               { key: "trash", label: "Trash", Icon: Trash2, color: "#6b7280" },
             ].map(u => {
               const data = utilities[u.key] || { provider: "", account: "", phone: "" };
+              const onChange = (field, val) => { setUtilities(prev => ({ ...prev, [u.key]: { ...data, [field]: val } })); setUtilitiesDirty(true); };
               return (
                 <div key={u.key} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 20px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -4063,18 +4103,9 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
                     <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{u.label}</span>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-                    <div>
-                      <label style={_modalLabel}>Provider</label>
-                      <input value={data.provider} onChange={e => { const updated = { ...utilities, [u.key]: { ...data, provider: e.target.value } }; saveUtilities(updated); }} placeholder="Provider name" style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} />
-                    </div>
-                    <div>
-                      <label style={_modalLabel}>Account #</label>
-                      <input value={data.account} onChange={e => { const updated = { ...utilities, [u.key]: { ...data, account: e.target.value } }; saveUtilities(updated); }} placeholder="Account number" style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} />
-                    </div>
-                    <div>
-                      <label style={_modalLabel}>Phone</label>
-                      <input value={data.phone} onChange={e => { const updated = { ...utilities, [u.key]: { ...data, phone: e.target.value } }; saveUtilities(updated); }} placeholder="555-0101" style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} />
-                    </div>
+                    <div><label style={_modalLabel}>Provider</label><input value={data.provider} onChange={e => onChange("provider", e.target.value)} placeholder="Provider name" style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} /></div>
+                    <div><label style={_modalLabel}>Account #</label><input value={data.account} onChange={e => onChange("account", e.target.value)} placeholder="Account number" style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} /></div>
+                    <div><label style={_modalLabel}>Phone</label><input value={data.phone} onChange={e => onChange("phone", e.target.value)} placeholder="555-0101" style={{ ..._modalInput, fontSize: 12, padding: "8px 10px" }} /></div>
                   </div>
                 </div>
               );
@@ -4086,29 +4117,35 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
       {/* ── School District Tab ── */}
       {tab === "school" && (
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-            <GraduationCap size={20} color={C.green} />
-            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>School District</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <GraduationCap size={20} color={C.green} />
+              <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>School District</div>
+            </div>
+            {schoolDirty && <button onClick={saveSchool} style={_addBtn}>Save</button>}
           </div>
           <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 22px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-              <div style={{ gridColumn: "1 / -1" }}>
-                <label style={_modalLabel}>District Name</label>
-                <input value={schoolDistrict.district} onChange={e => saveSchoolDistrict({ ...schoolDistrict, district: e.target.value })} placeholder="e.g. Springfield Public Schools" style={_modalInput} />
-              </div>
-              <div>
-                <label style={_modalLabel}>Elementary School</label>
-                <input value={schoolDistrict.elementary} onChange={e => saveSchoolDistrict({ ...schoolDistrict, elementary: e.target.value })} placeholder="School name" style={_modalInput} />
-              </div>
-              <div>
-                <label style={_modalLabel}>Middle School</label>
-                <input value={schoolDistrict.middle} onChange={e => saveSchoolDistrict({ ...schoolDistrict, middle: e.target.value })} placeholder="School name" style={_modalInput} />
-              </div>
-              <div>
-                <label style={_modalLabel}>High School</label>
-                <input value={schoolDistrict.high} onChange={e => saveSchoolDistrict({ ...schoolDistrict, high: e.target.value })} placeholder="School name" style={_modalInput} />
-              </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ gridColumn: "1 / -1" }}><label style={_modalLabel}>District Name</label>
+                <input value={schoolDistrict.district} onChange={e => { setSchoolDistrict(p => ({ ...p, district: e.target.value })); setSchoolDirty(true); }} placeholder="e.g. Springfield Public Schools" style={_modalInput} /></div>
+              <div><label style={_modalLabel}>Elementary School</label>
+                <input value={schoolDistrict.elementary} onChange={e => { setSchoolDistrict(p => ({ ...p, elementary: e.target.value })); setSchoolDirty(true); }} placeholder="School name" style={_modalInput} /></div>
+              <div><label style={_modalLabel}>Middle School</label>
+                <input value={schoolDistrict.middle} onChange={e => { setSchoolDistrict(p => ({ ...p, middle: e.target.value })); setSchoolDirty(true); }} placeholder="School name" style={_modalInput} /></div>
+              <div><label style={_modalLabel}>High School</label>
+                <input value={schoolDistrict.high} onChange={e => { setSchoolDistrict(p => ({ ...p, high: e.target.value })); setSchoolDirty(true); }} placeholder="School name" style={_modalInput} /></div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Notes Tab ── */}
+      {tab === "notes" && (
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Notes</div>
+          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 22px" }}>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes about this property..." rows={8} style={{ ..._modalInput, resize: "vertical", minHeight: 120 }} />
+            <button onClick={saveNotes} disabled={notesSaving} style={{ ..._addBtn, marginTop: 12, opacity: notesSaving ? 0.7 : 1 }}>{notesSaving ? "Saving..." : "Save Notes"}</button>
           </div>
         </div>
       )}
@@ -4121,11 +4158,18 @@ function PropertyProfile({ property, tenants, payments, leases, loans, maintenan
 function TenantProfile({ tenantId, tenants, payments, session, onBack, onOpenProperty, properties }) {
   const [tab, setTab] = useState("info");
   const [photoUrl, setPhotoUrl] = useState("");
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
   const [notes, setNotes] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
   const [docs, setDocs] = useState([]);
   const [docModal, setDocModal] = useState(null);
   const [docForm, setDocForm] = useState({ name: "", type: "lease", file: null });
+  const [payModal, setPayModal] = useState(false);
+  const [payForm, setPayForm] = useState({ amount: "", dueDate: "", paidDate: "", month: "", notes: "" });
+  const [paySaving, setPaySaving] = useState(false);
+  const [localPayments, setLocalPayments] = useState([]);
 
   const tenant = tenants.find(t => t.id === tenantId);
 
@@ -4135,13 +4179,38 @@ function TenantProfile({ tenantId, tenants, payments, session, onBack, onOpenPro
       .then(res => { if (res.data) setDocs(res.data); });
     supabase.from("tenants").select("notes, photo_url, email, deposit").eq("id", tenantId).maybeSingle()
       .then(res => { if (res.data) { setNotes(res.data.notes || ""); setPhotoUrl(res.data.photo_url || ""); } });
+    supabase.from("payment_history").select("*").eq("tenant_id", tenantId).order("due_date", { ascending: false })
+      .then(res => { if (res.data) setLocalPayments(res.data); });
   }, [session, tenantId]);
 
   if (!tenant) return <div style={{ textAlign: "center", padding: 60, color: C.muted }}>Tenant not found.</div>;
 
-  const tenantPayments = payments.filter(p => p.tenant_id === tenantId).sort((a, b) => new Date(b.due_date || 0) - new Date(a.due_date || 0));
+  const tenantPayments = localPayments.length > 0 ? localPayments : payments.filter(p => p.tenant_id === tenantId).sort((a, b) => new Date(b.due_date || 0) - new Date(a.due_date || 0));
   const property = properties.find(p => p.address === tenant.property_id || p.id === tenant.property_id);
   const hasOverdue = tenantPayments.some(p => !p.paid_date && new Date(p.due_date) < new Date());
+
+  const openEdit = () => {
+    setEditForm({ name: tenant.name, phone: tenant.phone || "", property: tenant.property_id || "", unit: tenant.unit_number || "", rent: String(tenant.monthly_rent || ""), status: tenant.status || "current", leaseEnd: tenant.lease_end || "", deposit: String(tenant.deposit || tenant.monthly_rent || "") });
+    setEditMode(true);
+  };
+  const saveEdit = async () => {
+    setEditSaving(true);
+    const res = await supabase.from("tenants").update({ name: editForm.name, phone: editForm.phone, property_id: editForm.property, unit_number: editForm.unit, monthly_rent: num(editForm.rent), status: editForm.status, lease_end: editForm.leaseEnd || null, deposit: num(editForm.deposit) }).eq("id", tenantId);
+    dbLog("tenants.update", res);
+    setEditSaving(false);
+    setEditMode(false);
+  };
+
+  const savePayment = async () => {
+    if (!payForm.dueDate || !payForm.amount) return;
+    setPaySaving(true);
+    const res = await supabase.from("payment_history").insert({ user_id: session.user.id, tenant_id: tenantId, property_id: tenant.property_id || "", amount: num(payForm.amount), due_date: payForm.dueDate, paid_date: payForm.paidDate || null, month: payForm.month, notes: payForm.notes }).select().single();
+    dbLog("payment_history.insert", res);
+    if (res.data) setLocalPayments(prev => [res.data, ...prev]);
+    setPaySaving(false);
+    setPayModal(false);
+    setPayForm({ amount: "", dueDate: "", paidDate: "", month: "", notes: "" });
+  };
 
   const getPaymentStatus = (p) => {
     if (!p.paid_date) return { label: "UNPAID", bg: C.redLight, color: C.red };
@@ -4161,7 +4230,8 @@ function TenantProfile({ tenantId, tenants, payments, session, onBack, onOpenPro
 
   const saveNotes = async () => {
     setNotesSaving(true);
-    await supabase.from("tenants").update({ notes }).eq("id", tenantId);
+    const res = await supabase.from("tenants").update({ notes }).eq("id", tenantId);
+    dbLog("tenants.notes_update", res);
     setNotesSaving(false);
   };
 
@@ -4195,20 +4265,59 @@ function TenantProfile({ tenantId, tenants, payments, session, onBack, onOpenPro
         <ArrowLeft size={16} /> Back
       </div>
 
+      {/* Edit modal */}
+      {editMode && (
+        <div style={_modalOverlay}><div style={_modalBox}>
+          {_modalHeader("Edit Tenant", () => setEditMode(false))}
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Name</label><input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} style={_modalInput} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Phone</label><input value={editForm.phone} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Status</label>
+              <select value={editForm.status} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))} style={{ ..._modalInput, cursor: "pointer" }}>
+                <option value="current">Current</option><option value="notice_given">Notice Given</option><option value="vacating">Vacating</option><option value="past_tenant">Past Tenant</option>
+              </select></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Property</label><input value={editForm.property} onChange={e => setEditForm(p => ({ ...p, property: e.target.value }))} style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Unit</label><input value={editForm.unit} onChange={e => setEditForm(p => ({ ...p, unit: e.target.value }))} style={_modalInput} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Rent / Mo</label><input type="number" value={editForm.rent} onChange={e => setEditForm(p => ({ ...p, rent: e.target.value }))} style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Deposit</label><input type="number" value={editForm.deposit} onChange={e => setEditForm(p => ({ ...p, deposit: e.target.value }))} style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Lease End</label><input type="date" value={editForm.leaseEnd} onChange={e => setEditForm(p => ({ ...p, leaseEnd: e.target.value }))} style={_modalInput} /></div>
+          </div>
+          <button onClick={saveEdit} disabled={editSaving} style={{ ..._modalSubmit(), opacity: editSaving ? 0.7 : 1 }}>{editSaving ? "Saving..." : "Save Changes"}</button>
+        </div></div>
+      )}
+
+      {/* Payment modal */}
+      {payModal && (
+        <div style={_modalOverlay}><div style={_modalBox}>
+          {_modalHeader("Record Payment", () => setPayModal(false))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Amount</label><input type="number" value={payForm.amount} onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))} placeholder="0" style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Month</label><input value={payForm.month} onChange={e => setPayForm(p => ({ ...p, month: e.target.value }))} placeholder="e.g. Mar 2026" style={_modalInput} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label style={_modalLabel}>Due Date</label><input type="date" value={payForm.dueDate} onChange={e => setPayForm(p => ({ ...p, dueDate: e.target.value }))} style={_modalInput} /></div>
+            <div><label style={_modalLabel}>Paid Date</label><input type="date" value={payForm.paidDate} onChange={e => setPayForm(p => ({ ...p, paidDate: e.target.value }))} style={_modalInput} /></div>
+          </div>
+          <div style={{ marginBottom: 12 }}><label style={_modalLabel}>Notes</label><input value={payForm.notes} onChange={e => setPayForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional" style={_modalInput} /></div>
+          <button onClick={savePayment} disabled={paySaving} style={{ ..._modalSubmit(), opacity: paySaving ? 0.7 : 1 }}>{paySaving ? "Saving..." : "Record Payment"}</button>
+        </div></div>
+      )}
+
       {/* Header */}
       <div style={{ display: "flex", gap: 20, marginBottom: 28, flexWrap: "wrap" }}>
         <label style={{ width: 90, height: 90, borderRadius: "50%", border: `2px dashed ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", overflow: "hidden", flexShrink: 0, background: photoUrl ? "none" : C.bg }}>
-          {photoUrl ? (
-            <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          ) : (
-            <Camera size={24} color={C.mutedLight} />
-          )}
+          {photoUrl ? <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Camera size={24} color={C.mutedLight} />}
           <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: "none" }} />
         </label>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
             <div style={{ fontSize: 26, fontWeight: 800, color: C.text }}>{tenant.name}</div>
             {statusBadge(hasOverdue ? "late" : tenant.status)}
+            <button onClick={openEdit} style={{ ...(_editBtn), color: C.green }}>Edit</button>
           </div>
           <div style={{ fontSize: 13, color: C.muted, display: "flex", gap: 16, flexWrap: "wrap" }}>
             {tenant.property_id && (
@@ -4274,7 +4383,10 @@ function TenantProfile({ tenantId, tenants, payments, session, onBack, onOpenPro
       {/* ── Payment History Tab ── */}
       {tab === "payments" && (
         <div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Payment History</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Payment History</div>
+            <button onClick={() => setPayModal(true)} style={_addBtn}>+ Record Payment</button>
+          </div>
           {tenantPayments.length === 0 ? (
             <div style={{ background: C.white, border: `1.5px dashed ${C.border}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
               <DollarSign size={32} color={C.mutedLight} style={{ marginBottom: 8, opacity: 0.4 }} />
@@ -5283,7 +5395,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
               <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 14 }}>Needs Attention</div>
               <div className="db-attention-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 28 }}>
                 {/* Late payments */}
-                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px" }}>
+                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px", maxHeight: 280, overflowY: "auto" }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: C.red, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Late Payments</div>
                   {lateTenants.length === 0 ? (
                     <div style={{ fontSize: 13, color: C.muted, fontStyle: "italic" }}>All payments current.</div>
@@ -5295,7 +5407,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                   ))}
                 </div>
                 {/* Expiring leases */}
-                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px" }}>
+                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px", maxHeight: 280, overflowY: "auto" }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: C.yellow, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Leases Expiring in 60 Days</div>
                   {expiring60.length === 0 ? (
                     <div style={{ fontSize: 13, color: C.muted, fontStyle: "italic" }}>No leases expiring soon.</div>
@@ -5307,7 +5419,7 @@ function Dashboard({ standards, onSaveStandards, onShowSettings, mode, setMode, 
                   ))}
                 </div>
                 {/* Balloon payments */}
-                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px" }}>
+                <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 16px", maxHeight: 280, overflowY: "auto" }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: C.yellowDark, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Balloon Payments Within 12mo</div>
                   {balloons12.length === 0 ? (
                     <div style={{ fontSize: 13, color: C.muted, fontStyle: "italic" }}>No balloon payments due.</div>
